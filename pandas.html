@@ -1,0 +1,818 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>分析師養成記 Pandas 篇</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: same work-ticket desk as the SQL edition; notebook-blue accent marks the Python track. */
+:root{
+  --bg:#EDF0F3; --surface:#FFFFFF; --sunk:#E1E6EC; --ink:#18212B; --muted:#56616E; --line:#C8D0DA;
+  --accent:#1F5FA8; --on-accent:#FFFFFF; --accent-soft:#D7E5F6;
+  --amber:#B9671F; --amber-soft:#F5E3CF;
+  --ok:#1D7438; --ok-soft:#DBF0E0; --bad:#AE372B; --bad-soft:#F7DDD9;
+  --code-bg:#141B24; --code-ink:#DCE7F3; --code-dim:#7E8EA2;
+  --f-display:"LXGW WenKai TC","Noto Serif TC","Songti TC",serif;
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",Consolas,"Courier New",monospace;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F141A; --surface:#161E27; --sunk:#1E2833; --ink:#E1E8F0; --muted:#97A3B1; --line:#2C3743;
+  --accent:#6EA8F0; --on-accent:#0A1A2E; --accent-soft:#18304D;
+  --amber:#E59D5A; --amber-soft:#3A2A1B;
+  --ok:#62CC84; --ok-soft:#163320; --bad:#F08074; --bad-soft:#3B1D1A;
+  --code-bg:#0A0F15; --code-ink:#DCE7F3; --code-dim:#6E7E92; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F141A; --surface:#161E27; --sunk:#1E2833; --ink:#E1E8F0; --muted:#97A3B1; --line:#2C3743;
+  --accent:#6EA8F0; --on-accent:#0A1A2E; --accent-soft:#18304D;
+  --amber:#E59D5A; --amber-soft:#3A2A1B;
+  --ok:#62CC84; --ok-soft:#163320; --bad:#F08074; --bad-soft:#3B1D1A;
+  --code-bg:#0A0F15; --code-ink:#DCE7F3; --code-dim:#6E7E92; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+img{max-width:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.65}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;font-weight:700}
+code,.mono{font-family:var(--f-mono)}
+a{color:var(--accent)}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,textarea:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.top{border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.top-in{max-width:1440px;margin:0 auto;padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px}
+.brand{display:flex;align-items:baseline;gap:10px;min-width:0;flex-wrap:wrap}
+.brand h1{font-size:1.5rem;letter-spacing:.02em}
+.brand span{color:var(--muted);font-size:.85rem}
+.brand a{font-size:.85rem}
+.rank{display:flex;align-items:center;gap:12px;margin-left:auto;min-width:0;flex-wrap:wrap}
+.badge{font-family:var(--f-display);font-size:1rem;padding:2px 12px;border-radius:999px;background:var(--amber-soft);color:var(--amber);font-weight:700;white-space:nowrap}
+.xpbar{width:180px;max-width:40vw;height:8px;border-radius:99px;background:var(--sunk);overflow:hidden}
+.xpbar i{display:block;height:100%;background:var(--amber);border-radius:99px;transition:width .5s ease}
+.xptext{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tbtn{border:1px solid var(--line);background:transparent;border-radius:8px;padding:4px 12px;font-size:.85rem}
+.tbtn:hover{border-color:var(--accent);color:var(--accent)}
+.tbtn.warn{border-color:var(--bad);color:var(--bad)}
+.app{max-width:1440px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;grid-template-columns:240px minmax(0,1fr) 290px;gap:20px;align-items:start}
+@media (max-width:1180px){.app{grid-template-columns:220px minmax(0,1fr)}.schema{grid-column:1/-1}}
+@media (max-width:760px){.app{grid-template-columns:minmax(0,1fr)}}
+.queue{display:flex;flex-direction:column;gap:6px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 76px)}
+.queue h3{font-family:var(--f-body);font-size:.75rem;letter-spacing:.12em;color:var(--muted);font-weight:500;margin:4px 4px 2px}
+.qitem{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;text-align:left;border:1px solid transparent;background:transparent;border-radius:10px;padding:8px 10px}
+.qitem:hover:not(:disabled){background:var(--surface)}
+.qitem.on{background:var(--surface);border-color:var(--line)}
+.qitem:disabled{opacity:.45;cursor:not-allowed}
+.qno{font-family:var(--f-mono);font-size:.72rem;color:var(--muted);grid-row:1/3;align-self:start;padding-top:3px}
+.qt{font-weight:500;font-size:.92rem;line-height:1.35}
+.qp{font-size:.75rem;color:var(--muted);display:flex;gap:6px;align-items:center}
+.dots{display:inline-flex;gap:3px}
+.dots b{width:7px;height:7px;border-radius:50%;background:var(--line)}
+.dots b.y{background:var(--accent)}
+.qsep{height:1px;background:var(--line);margin:8px 4px}
+@media (max-width:760px){.queue{position:static;flex-direction:row;overflow-x:auto;padding-bottom:4px}.queue h3,.qsep{display:none}.qitem{flex:0 0 200px}}
+main{display:flex;flex-direction:column;gap:16px;min-width:0}
+.ticket,.task{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px 22px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.thead{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:.8rem;color:var(--muted)}
+.tno{font-family:var(--f-mono);letter-spacing:.04em}
+.pri{font-family:var(--f-mono);font-size:.72rem;padding:1px 8px;border-radius:6px;background:var(--sunk);color:var(--ink)}
+.pri.p1{background:var(--bad-soft);color:var(--bad)}
+.ticket h2{font-size:1.65rem}
+.msg{display:flex;gap:12px;align-items:flex-start}
+.avatar{flex:0 0 40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font-family:var(--f-display);font-weight:700;font-size:1.05rem}
+.bubble{min-width:0;background:var(--sunk);border-radius:4px 14px 14px 14px;padding:10px 14px;font-family:var(--f-display);font-size:1.05rem;line-height:1.7}
+.bubble small{display:block;font-family:var(--f-body);font-size:.75rem;color:var(--muted);margin-bottom:2px}
+.steps{display:flex;flex-wrap:wrap;gap:6px;list-style:none;margin:0;padding:0}
+.steps button{border:1px solid var(--line);background:transparent;border-radius:999px;padding:3px 12px;font-size:.8rem;display:flex;gap:6px;align-items:center}
+.steps button.on{border-color:var(--accent);color:var(--accent);font-weight:500}
+.steps button.y::before{content:"✓";color:var(--accent);font-weight:700}
+.steps button:disabled{opacity:.4;cursor:not-allowed}
+.task-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:.78rem}
+.kind{font-weight:700;letter-spacing:.08em;color:var(--accent)}
+.chip{padding:1px 10px;border-radius:999px;background:var(--sunk);color:var(--muted)}
+.chip.soft{background:var(--amber-soft);color:var(--amber)}
+.xpchip{margin-left:auto;font-family:var(--f-mono);color:var(--amber);font-weight:600}
+.prompt{margin:0;font-size:1.02rem;max-width:68ch}
+.out{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline;font-size:.85rem;background:var(--sunk);border-radius:8px;padding:8px 12px}
+.out span{color:var(--muted);font-size:.75rem;letter-spacing:.08em}
+.out code{font-size:.82rem;word-break:break-word}
+textarea{width:100%;min-height:190px;resize:vertical;background:var(--code-bg);color:var(--code-ink);border:1px solid var(--line);border-radius:10px;padding:14px;font-family:var(--f-mono);font-size:.88rem;line-height:1.6;tab-size:4}
+textarea::placeholder{color:var(--code-dim)}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 14px;font-size:.88rem}
+.btn:hover:not(:disabled){border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:500}
+.btn:disabled{opacity:.55;cursor:wait}
+.kbd{font-size:.75rem;color:var(--muted)}
+.spacer{flex:1}
+.hints{display:flex;flex-direction:column;gap:6px}
+.hint{border-left:3px solid var(--amber);background:var(--amber-soft);padding:6px 12px;border-radius:0 8px 8px 0;font-size:.9rem}
+.prompt code,.fb code,.bubble code,.hint code{font-size:.85em;background:var(--sunk);padding:0 4px;border-radius:4px}
+.hint code{background:transparent}
+.fb{border-radius:10px;padding:10px 14px;font-size:.92rem}
+.fb.bad{background:var(--bad-soft);border:1px solid var(--bad)}
+.fb.info{background:var(--sunk)}
+.fb.ok{background:var(--ok-soft);border:1px solid var(--ok)}
+.fb.ok strong{color:var(--ok)}
+.fb .raw{display:block;font-family:var(--f-mono);font-size:.75rem;color:var(--muted);margin-top:4px;white-space:pre-wrap;word-break:break-word}
+pre.sol,pre.stdout{margin:8px 0 0;background:var(--code-bg);color:var(--code-ink);border-radius:8px;padding:12px;font-family:var(--f-mono);font-size:.82rem;overflow-x:auto;white-space:pre}
+pre.stdout{max-height:240px;overflow-y:auto}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;max-height:380px;overflow-y:auto}
+table{border-collapse:collapse;width:100%;font-size:.85rem;font-variant-numeric:tabular-nums}
+th,td{padding:6px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--sunk);font-family:var(--f-mono);font-weight:600;font-size:.78rem}
+td.num{text-align:right;font-family:var(--f-mono);font-size:.8rem}
+.nul{color:var(--muted);font-style:italic;font-family:var(--f-mono);font-size:.75rem}
+.meta{margin:4px 2px 0;font-size:.75rem;color:var(--muted)}
+.options{display:flex;flex-direction:column;gap:8px}
+.opt{text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 14px;display:flex;flex-direction:column;gap:6px}
+.opt:hover:not(:disabled){border-color:var(--accent)}
+.opt:disabled{cursor:default}
+.opt .ofb{font-size:.86rem;border-top:1px dashed var(--line);padding-top:6px}
+.opt.wrong{border-color:var(--bad);background:var(--bad-soft)}
+.opt.right{border-color:var(--ok);background:var(--ok-soft)}
+.opt .tag{font-size:.72rem;font-weight:700;letter-spacing:.08em}
+.opt.wrong .tag{color:var(--bad)} .opt.right .tag{color:var(--ok)}
+.stamp{align-self:flex-start;font-family:var(--f-display);font-size:1.1rem;color:var(--ok);border:2px solid var(--ok);border-radius:8px;padding:2px 14px;transform:rotate(-3deg)}
+.resume{background:var(--sunk);border-radius:10px;padding:12px 16px}
+.resume b{display:block;font-size:.72rem;letter-spacing:.1em;color:var(--muted);font-weight:500;margin-bottom:2px}
+.skillgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+.sk{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;opacity:.55}
+.sk.y{opacity:1;border-color:var(--accent);background:var(--accent-soft)}
+.sk.y.s{border-color:var(--amber);background:var(--amber-soft)}
+.sk b{font-weight:500}
+.sk span{font-size:.75rem;color:var(--muted)}
+.lead{margin:0;color:var(--muted);max-width:68ch}
+.loading{display:flex;gap:10px;align-items:center;font-size:.88rem;color:var(--muted);background:var(--accent-soft);border-radius:10px;padding:10px 14px}
+.loading i{width:14px;height:14px;border-radius:50%;border:2px solid var(--accent);border-right-color:transparent;animation:spin 1s linear infinite;flex:0 0 14px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.schema{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px;min-width:0;position:sticky;top:calc(env(safe-area-inset-top,0px) + 76px);max-height:calc(100vh - 100px);overflow-y:auto}
+@media (max-width:1180px){.schema{position:static;max-height:none}}
+.schema h3{font-size:1.15rem}
+.schema .lead{font-size:.8rem}
+details{border-top:1px solid var(--line);padding-top:6px}
+summary{cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:baseline;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary code{font-weight:600;font-size:.85rem;color:var(--accent)}
+summary span{font-size:.72rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.cols{list-style:none;margin:6px 0;padding:0;display:flex;flex-direction:column;gap:2px;font-size:.8rem}
+.cols li{display:flex;gap:8px;justify-content:space-between}
+.cols code{font-size:.76rem}
+.cols em{font-style:normal;font-family:var(--f-mono);font-size:.68rem;color:var(--code-dim);margin-left:4px}
+.cols span{color:var(--muted);text-align:right;font-size:.75rem}
+.pv{font-size:.75rem;border:none;background:none;color:var(--accent);padding:0;text-decoration:underline;text-underline-offset:3px}
+.pvbox{margin-top:6px}
+.pvbox table{font-size:.72rem}
+.pvbox th,.pvbox td{padding:3px 6px}
+.toast{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:.9rem;z-index:20;transition:opacity .3s,transform .3s}
+.toast[hidden]{display:block!important;opacity:0;transform:translateY(12px);pointer-events:none}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="brand"><h1>分析師養成記</h1><span>Pandas 篇 · 拾光茶飲數據組</span><a href="./">切換到 SQL 篇</a></div>
+  <div class="rank">
+    <span class="badge" id="lvl">實習分析師</span>
+    <div><div class="xpbar"><i id="xpfill" style="width:0%"></i></div><div class="xptext" id="xptext">0 XP</div></div>
+    <button class="tbtn" id="btn-skills" type="button">技能樹</button>
+    <button class="tbtn" id="btn-reset" type="button">重置進度</button>
+  </div>
+</div></header>
+<div class="app">
+  <nav class="queue" id="queue" aria-label="案件列表"></nav>
+  <main id="main"></main>
+  <aside class="schema" id="schema" aria-label="資料表"></aside>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const pct0=x=>Math.round(x*100)+'%', pct1=x=>(x*100).toFixed(1)+'%';
+
+/* ---------- skills ---------- */
+const SKILLS={
+  select:{n:'篩選與排序 loc / sort_values',t:'h'}, na:{n:'缺值檢查 isna',t:'h'}, merge:{n:'合併表格 merge',t:'h'}, groupby:{n:'分組彙總 groupby / agg',t:'h'},
+  dedupe:{n:'去除重複 duplicated',t:'h'}, clean:{n:'字串清理與型別轉換',t:'h'}, mapping:{n:'類別對應 apply / map',t:'h'},
+  dt:{n:'日期時間 .dt',t:'h'}, rolling:{n:'移動平均 rolling',t:'h'}, pivot:{n:'樞紐分析 pivot_table',t:'h'}, segment:{n:'條件分群 np.select',t:'h'}, stats:{n:'假設檢定 z-test',t:'h'},
+  tooling:{n:'SQL 與 Python 的分工',t:'s'}, automate:{n:'流程自動化思維',t:'s'}, dataquality:{n:'資料品質溝通',t:'s'}, viz:{n:'選對圖表說故事',t:'s'},
+  experiment:{n:'實驗設計與對照組',t:'s'}, explain:{n:'向非技術人解釋統計',t:'s'}, portfolio:{n:'作品集包裝',t:'s'}
+};
+
+/* ---------- chapters ---------- */
+const CHAPTERS=[
+{id:'p1',no:'PY-101',pri:'P3',title:'換個工具：認識 DataFrame',who:{name:'林經理',role:'數據組主管',i:'林'},
+ intro:'團隊決定導入 Python 了。資料跟 SQL 篇是同一份，只是每張表現在都是一個 pandas DataFrame（<code>orders</code>、<code>products</code>…），欄位列在資料表清單裡。<b>程式碼最後一行的結果</b>，會拿來跟任務要求比對。',
+ steps:[
+  {id:'p1s1',type:'code',skill:'select',prompt:'列出所有<code>鮮奶茶</code>類別的品項名稱與售價，售價由高到低。',out:'DataFrame：name, price（依 price 由高到低）',ordered:true,
+   hints:["篩選列：<code>products[products['category'] == '鮮奶茶']</code>","選欄位用 <code>[['name', 'price']]</code>，排序用 <code>.sort_values('price', ascending=False)</code>"],
+   solution:"products.loc[products['category'] == '鮮奶茶', ['name', 'price']] \\\n    .sort_values('price', ascending=False)"},
+  {id:'p1s2',type:'code',skill:'select',prompt:'會員等級（member_tier）為<code>金卡</code>的會員有幾位？',out:'一個數字',
+   hints:["<code>customers['member_tier'] == '金卡'</code> 會得到一串 True / False","True 會被當成 1，所以對它 <code>.sum()</code> 就是人數"],
+   solution:"(customers['member_tier'] == '金卡').sum()"},
+  {id:'p1s3',type:'code',skill:'na',prompt:'<code>orders</code> 裡 customer_id 是缺值的訂單（非會員散客）有幾筆？',out:'一個數字',
+   hints:['pandas 的缺值要用 <code>.isna()</code> 檢查，不能用 <code>== None</code>','<code>orders[\'customer_id\'].isna().sum()</code>'],
+   solution:"orders['customer_id'].isna().sum()"},
+  {id:'p1s4',type:'choice',skill:'tooling',prompt:'「團隊開始用 Python 了。你覺得以後分析要用 SQL 還是 Pandas？」',
+   options:[
+    {t:'「全部改用 Python，SQL 太舊了。」',fb:'SQL 在資料庫端處理大量資料又快又省記憶體，把整張表拉進 Python 反而慢。'},
+    {t:'「先用 SQL 在資料庫篩選、彙總出需要的資料，再用 Pandas 做清理、統計檢定、視覺化和自動化報表。」',ok:true,fb:'兩個工具是搭檔。職缺寫「SQL + Python」，就是希望你知道什麼時候用哪一個。'},
+    {t:'「看心情，哪個熟就用哪個。」',fb:'工具選擇會影響效能、可維護性和團隊協作，要能說出理由。'},
+    {t:'「都用 Excel 比較快。」',fb:'Excel 很適合快速檢視，但資料量大、需要重複執行或版本控管時就力不從心。'}
+   ]}
+ ],
+ resume:'使用 Pandas 進行資料篩選、排序與缺值檢查，並能依情境判斷 SQL 與 Python 的分工。',
+ tip:'面試常問「SQL 和 Pandas 差在哪」。答案的重點是分工：資料庫端用 SQL 減量，本機用 Pandas 做彈性處理。'},
+
+{id:'p2',no:'PY-205',pri:'P2',title:'門市週報 Python 版',who:{name:'阿凱',role:'營運經理',i:'凱'},
+ intro:'聽說你會 Python 了？我的週報能不能變成按一下就跑完的那種？',
+ steps:[
+  {id:'p2s1',type:'code',skill:'merge',prompt:'各門市的總營收（營收 = qty × unit_price）。<code>order_items</code> 要先 merge <code>orders</code>，再 merge <code>stores</code> 才拿得到門市名稱。',out:'門市名稱, 營收（依營收由高到低）',ordered:true,
+   hints:["先算每列金額：<code>order_items.assign(revenue=order_items['qty'] * order_items['unit_price'])</code>","<code>.merge(orders, on='order_id').merge(stores, on='store_id')</code>","<code>.groupby('name')['revenue'].sum().sort_values(ascending=False)</code>"],
+   solution:"items = order_items.assign(revenue=order_items['qty'] * order_items['unit_price'])\ndf = items.merge(orders, on='order_id').merge(stores, on='store_id')\ndf.groupby('name')['revenue'].sum().sort_values(ascending=False)"},
+  {id:'p2s2',type:'code',skill:'groupby',prompt:'各通路（channel）的訂單數與平均客單價（每筆訂單金額的平均，四捨五入到整數）。',out:'channel, orders, avg_order_value（依 orders 由多到少）',ordered:true,
+   hints:['先把明細加總成「每筆訂單的金額」，再 merge 回 <code>orders</code>，這樣一筆訂單只算一次。',"<code>.groupby('channel').agg(orders=('order_id', 'count'), avg_order_value=('amount', 'mean'))</code>",'最後 <code>.round(0).sort_values(\'orders\', ascending=False)</code>'],
+   solution:"amount = (order_items['qty'] * order_items['unit_price']) \\\n    .groupby(order_items['order_id']).sum().rename('amount')\ndf = orders.merge(amount, left_on='order_id', right_index=True)\n(df.groupby('channel')\n   .agg(orders=('order_id', 'count'), avg_order_value=('amount', 'mean'))\n   .round(0)\n   .sort_values('orders', ascending=False))"},
+  {id:'p2s3',type:'choice',skill:'automate',prompt:'「太讚了！這份報表我每週一都要，你可以每週幫我跑一次嗎？」',
+   options:[
+    {t:'「好，每週一早上我手動跑給你。」',fb:'可以，但你會被例行工作綁住，請假時報表就斷了。'},
+    {t:'「這種例行報表不是分析師該做的。」',fb:'例行報表是建立信任的起點，重點是把它做得省力。'},
+    {t:'「我把程式整理成一個函式，日期當參數、輸出固定格式，並加上『各店加總要等於總營收』的檢查。之後排程自動寄信給你。」',ok:true,fb:'可重複、可驗證、可交接。把重複工作自動化，你才有時間做更有價值的分析。'},
+    {t:'「我把程式碼寄給你，你自己跑。」',fb:'對方不會 Python，這等於把問題丟回去。'}
+   ]}
+ ],
+ resume:'以 merge、groupby 建立可重複執行的營運報表流程，並加入數字一致性檢查。',
+ tip:'「我把每週 2 小時的手工報表自動化」是轉職履歷上很有說服力的一句話。'},
+
+{id:'p3',no:'CS-310',pri:'P2',title:'髒資料大掃除',who:{name:'Mia',role:'客服主管',i:'M'},
+ intro:'10 月我們做了門市滿意度問卷（1–10 分），但表單是自由填寫的，資料亂七八糟……可以幫我整理出各店的平均分數嗎？問卷在 <code>survey</code> 這張表。',
+ steps:[
+  {id:'p3s1',type:'code',skill:'dedupe',prompt:'先檢查重複：<code>survey</code> 裡有幾列是「完全重複」的資料（每個欄位都一樣）？',out:'一個數字',
+   hints:['<code>survey.duplicated()</code> 會把第二次以後出現的重複列標成 True','加總 True 的數量就是答案'],
+   solution:"survey.duplicated().sum()"},
+  {id:'p3s2',type:'code',skill:'clean',prompt:'去掉重複後清理分數：score 有「8分」「 7 」這種寫法，也有亂填的。把「分」和空白去掉、轉成數字，轉不了的或不在 1–10 之間的都算無效。有效分數有幾筆？',out:'一個數字',
+   hints:["<code>s = survey.drop_duplicates()</code>","<code>s['score'].str.replace('分', '').str.strip()</code> 去掉雜字","<code>pd.to_numeric(..., errors='coerce')</code> 轉不了的會變成 NaN，再用 <code>.between(1, 10).sum()</code> 計數"],
+   solution:"s = survey.drop_duplicates()\nscore = pd.to_numeric(s['score'].str.replace('分', '').str.strip(), errors='coerce')\nscore.between(1, 10).sum()"},
+  {id:'p3s3',type:'code',skill:'mapping',prompt:'門市名稱也很亂（「信義店」「台北 信義店」…）。統一成正式名稱後，算出各店的平均有效分數，四捨五入到小數 2 位。',out:'門市正式名稱, 平均分數',
+   hints:["每家店名稱裡都有一個關鍵字：信義、中山、勤美、駁二、巨城","寫一個對照表 <code>keys = {'信義': '台北信義店', ...}</code>，用 <code>.apply(lambda x: ...)</code> 找出包含的關鍵字",'記得先去重、只留下有效分數，再 <code>groupby(...).mean().round(2)</code>'],
+   solution:"s = survey.drop_duplicates().copy()\ns['score_num'] = pd.to_numeric(s['score'].str.replace('分', '').str.strip(), errors='coerce')\ns = s[s['score_num'].between(1, 10)]\nkeys = {'信義': '台北信義店', '中山': '台北中山店', '勤美': '台中勤美店',\n        '駁二': '高雄駁二店', '巨城': '新竹巨城店'}\ns['store_clean'] = s['store'].apply(lambda x: next(v for k, v in keys.items() if k in x))\ns.groupby('store_clean')['score_num'].mean().round(2)"},
+  {id:'p3s4',type:'choice',skill:'dataquality',prompt:'「整理好了嗎？我明天要跟老闆報告各店滿意度。」你發現去重後有 {{invalidShare}} 的分數無效被排除，要怎麼說明？',
+   options:[
+    {t:'不提清理的事，直接給各店平均分數。',fb:'老闆之後如果發現筆數對不上，你和 Mia 的可信度都會受損。'},
+    {t:'「資料太髒了，沒辦法分析。」',fb:'真實世界的資料幾乎都是髒的，清理本來就是分析師的主要工作之一。'},
+    {t:'把無效分數都補成 5 分。',fb:'隨意補值會扭曲結果。要補值必須有合理依據，並且說明清楚。'},
+    {t:'「各店平均分數如附表。原始 {{rawRows}} 筆中有 {{dupRows}} 筆重複，去重後又有 {{invalidShare}} 分數格式錯誤或超出 1–10，已排除，各店樣本數仍足夠。建議問卷改成下拉選單，從源頭避免錯誤。另外台中勤美店只有 {{tcScore}} 分，留言多與芋泥缺貨有關。」',ok:true,fb:'透明交代清理規則與影響，提出源頭改善，最後把數字連回商業問題。'}
+   ]}
+ ],
+ resume:'清理 {{rawRows}} 筆問卷資料（去重、格式統一、異常值處理），揭露清理規則並提出表單改善建議。',
+ tip:'分析師有很大一部分時間在清理資料。面試時講出你「怎麼清」和「為什麼這樣清」，比講模型更加分。'},
+
+{id:'p4',no:'PY-322',pri:'P2',title:'營收的節奏',who:{name:'阿凱',role:'營運經理',i:'凱'},
+ intro:'我想知道營收的「節奏」：台中店到底是哪個月開始掉的？平日跟週末差多少？整體趨勢是往上還是往下？',
+ steps:[
+  {id:'p4s1',type:'code',skill:'dt',prompt:'台中勤美店（store_id = 3）每個月的營收。order_date 已經是日期型別。',out:'month（YYYY-MM）, 營收',
+   hints:["<code>df['order_date'].dt.strftime('%Y-%m')</code> 可以取出年月","先 merge 再篩 <code>store_id == 3</code>，最後依月份 groupby 加總"],
+   solution:"df = order_items.merge(orders, on='order_id').query('store_id == 3')\ndf.assign(month=df['order_date'].dt.strftime('%Y-%m'),\n          revenue=df['qty'] * df['unit_price']) \\\n  .groupby('month')['revenue'].sum()"},
+  {id:'p4s2',type:'code',skill:'rolling',prompt:'算出全公司「每日營收」的 7 日移動平均。2026-10-31 那天的 7 日均值是多少？四捨五入到整數。',out:'一個數字',
+   hints:['先依 order_date 加總出每日營收（一天一列）','<code>daily.rolling(7).mean()</code> 是 7 日移動平均','最後一天用 <code>.iloc[-1]</code> 取出，再 <code>round()</code>'],
+   solution:"df = order_items.merge(orders, on='order_id')\ndaily = (df['qty'] * df['unit_price']).groupby(df['order_date']).sum()\nround(daily.rolling(7).mean().iloc[-1])"},
+  {id:'p4s3',type:'code',skill:'dt',prompt:'平日和週末的「平均每日營收」各是多少？四捨五入到整數。',out:'day_type（平日 / 週末）, 平均每日營收',
+   hints:['先算每日營收，再判斷那天是星期幾','<code>.dt.dayofweek</code> 星期一是 0、星期日是 6，大於等於 5 就是週末',"<code>np.where(條件, '週末', '平日')</code>"],
+   solution:"df = order_items.merge(orders, on='order_id')\ndaily = (df['qty'] * df['unit_price']).groupby(df['order_date']).sum().reset_index(name='revenue')\ndaily['day_type'] = np.where(daily['order_date'].dt.dayofweek >= 5, '週末', '平日')\ndaily.groupby('day_type')['revenue'].mean().round(0)"},
+  {id:'p4s4',type:'choice',skill:'viz',prompt:'「區經理想看 7–10 月的營收趨勢圖，你會怎麼畫？」',
+   options:[
+    {t:'圓餅圖，每個月一塊。',fb:'圓餅圖看的是占比，看不出隨時間的變化。'},
+    {t:'3D 立體長條圖，看起來比較有質感。',fb:'3D 會扭曲高度的比較，好看但難讀。'},
+    {t:'直接給 123 天的明細表。',fb:'表格適合查數字，不適合看趨勢。'},
+    {t:'折線圖：每日營收用淡色細線，7 日移動平均用粗線，平日週末差異約 {{wkGap}}，並在 10/1 標註「台中芋泥斷貨」。',ok:true,fb:'時間趨勢用折線；移動平均濾掉週末起伏；用標註把數字和事件連起來，讓圖自己說故事。'}
+   ]}
+ ],
+ resume:'運用日期處理與移動平均分析營收趨勢與週末效應，製作含事件標註的趨勢圖。',
+ tip:'圖表的目的是讓人在 5 秒內看懂一件事。先想清楚「這張圖要說什麼」，再選圖。'},
+
+{id:'p5',no:'M-118',pri:'P2',title:'會員分群 RFM',who:{name:'Vivian',role:'行銷經理',i:'V'},
+ intro:'行銷想做分眾溝通，可以幫我把會員分成幾群嗎？聽說有個方法叫 RFM：最近一次消費（Recency）、消費頻率（Frequency）、消費金額（Monetary）。',
+ steps:[
+  {id:'p5s1',type:'code',skill:'groupby',prompt:'算出每位會員的消費次數與總消費金額，列出總消費金額最高的前 5 位。',out:'customer_id, frequency, monetary（依 monetary 由高到低，5 列）',ordered:true,
+   hints:["merge 後先算金額，並用 <code>dropna(subset=['customer_id'])</code> 排除散客","<code>.groupby('customer_id').agg(frequency=('order_id', 'nunique'), monetary=('amount', 'sum'))</code>","<code>.sort_values('monetary', ascending=False).head(5)</code>"],
+   solution:"df = order_items.merge(orders, on='order_id')\ndf['amount'] = df['qty'] * df['unit_price']\nrfm = df.dropna(subset=['customer_id']) \\\n    .groupby('customer_id') \\\n    .agg(frequency=('order_id', 'nunique'), monetary=('amount', 'sum'))\nrfm.sort_values('monetary', ascending=False).head(5)"},
+  {id:'p5s2',type:'code',skill:'pivot',prompt:'做一張「會員等級 × 通路」的訂單數交叉表：列是 member_tier，欄是 channel。',out:'member_tier, 以及每個通路一欄的訂單數',
+   hints:["先把 <code>orders</code> 和 <code>customers</code> 依 customer_id merge","<code>pd.pivot_table(m, index='member_tier', columns='channel', values='order_id', aggfunc='count')</code>",'用 <code>pd.crosstab</code> 也可以'],
+   solution:"m = orders.merge(customers, on='customer_id')\npd.pivot_table(m, index='member_tier', columns='channel',\n               values='order_id', aggfunc='count')"},
+  {id:'p5s3',type:'code',skill:'segment',prompt:'以 2026-10-31 為基準分群：消費次數 ≥ 10 次且最近一次消費在 14 天內（含）是<code>忠實客</code>；最近一次消費超過 30 天是<code>流失風險</code>；其他是<code>一般</code>。各群各有幾位會員？',out:'分群名稱, 人數',
+   hints:["每位會員：<code>last=('order_date', 'max')</code>、<code>frequency=('order_id', 'count')</code>","<code>(pd.Timestamp('2026-10-31') - last).dt.days</code> 就是 recency","<code>np.select([條件1, 條件2], ['忠實客', '流失風險'], default='一般')</code>，再 <code>value_counts()</code>"],
+   solution:"c = orders.dropna(subset=['customer_id']) \\\n    .groupby('customer_id') \\\n    .agg(last=('order_date', 'max'), frequency=('order_id', 'count'))\nc['recency'] = (pd.Timestamp('2026-10-31') - c['last']).dt.days\nc['segment'] = np.select(\n    [(c['frequency'] >= 10) & (c['recency'] <= 14), c['recency'] > 30],\n    ['忠實客', '流失風險'], default='一般')\nc['segment'].value_counts()"},
+  {id:'p5s4',type:'choice',skill:'experiment',prompt:'「我想對『流失風險』的 {{churnCount}} 位會員全部發 50 元折價券，下個月看回來多少人，就知道有沒有效！」',
+   options:[
+    {t:'「好主意，全部發！」',fb:'沒有對照組的話，就算有人回來，也分不清是折價券的功勞，還是他們本來就會回來。'},
+    {t:'「建議隨機留 20% 不發券當對照組，下個月比較兩組的回購率，差距才是折價券真正帶來的效果。」',ok:true,fb:'對照組（holdout）是衡量行銷成效的基本功，也是面試常考的實驗設計觀念。'},
+    {t:'「流失的客人就算了，把預算都給忠實客。」',fb:'也許是好策略，但應該用數據比較兩種做法，而不是直接放棄。'},
+    {t:'「先發給忠實客測試看看。」',fb:'測試對象要跟最後要套用的族群一致，忠實客的反應不能代表流失客。'}
+   ]}
+ ],
+ resume:'建立 RFM 會員分群，並為挽回活動設計含對照組的實驗以衡量真實成效。',
+ tip:'RFM 是行銷分析最常見的入門題，做成作品集時記得寫出「分群之後要對每群做什麼」。'},
+
+{id:'p6',no:'P-140',pri:'P1',title:'用統計說服老闆',who:{name:'Leo',role:'App 產品經理',i:'L'},
+ intro:'上次 Android 付款失敗的問題，工程說「可能只是剛好運氣不好」。可以用統計證明這不是巧合嗎？資料在 <code>app_events</code>。',
+ steps:[
+  {id:'p6s1',type:'code',skill:'groupby',prompt:'依平台與 App 版本，算出付款成功率 = 有 payment_success 的 session 數 ÷ 有 checkout 的 session 數，四捨五入到小數 3 位。',out:'platform, app_version, 成功率',
+   hints:["<code>app_events[app_events['event_name'] == 'checkout']</code> 先篩出結帳事件","<code>.groupby(['platform', 'app_version'])['session_id'].nunique()</code> 數不重複 session",'兩個 Series 相除會自動依索引對齊，再 <code>.round(3)</code>'],
+   solution:"keys = ['platform', 'app_version']\nck = app_events[app_events['event_name'] == 'checkout'].groupby(keys)['session_id'].nunique()\nps = app_events[app_events['event_name'] == 'payment_success'].groupby(keys)['session_id'].nunique()\n(ps / ck).round(3)"},
+  {id:'p6s2',type:'code',skill:'stats',prompt:'用兩比例 z 檢定比較 Android 5.2.0 與 5.3.0 的付款成功率。z =（舊版成功率 − 新版成功率）÷ 標準誤，標準誤用合併比例 p 計算：√(p(1−p)(1/n₁ + 1/n₂))。四捨五入到小數 2 位。',out:'一個數字（z 值）',
+   hints:['n 是各版本有 checkout 的 session 數，成功數是有 payment_success 的 session 數','合併比例 p = 兩版成功數總和 ÷ 兩版 n 總和','<code>np.sqrt(p * (1 - p) * (1 / n1 + 1 / n2))</code>'],
+   solution:"a = app_events[app_events['platform'] == 'Android']\nn = a[a['event_name'] == 'checkout'].groupby('app_version')['session_id'].nunique()\nx = a[a['event_name'] == 'payment_success'].groupby('app_version')['session_id'].nunique()\nrate = x / n\npool = x.sum() / n.sum()\nse = np.sqrt(pool * (1 - pool) * (1 / n['5.2.0'] + 1 / n['5.3.0']))\nround((rate['5.2.0'] - rate['5.3.0']) / se, 2)"},
+  {id:'p6s3',type:'choice',skill:'explain',prompt:'「z 值 {{zval}} 是什麼意思？我要跟老闆解釋，但他不懂統計。」',
+   options:[
+    {t:'「z 大於 1.96，所以 p 小於 0.05，拒絕虛無假設。」',fb:'完全正確，但老闆聽不懂，也不知道該做什麼決定。'},
+    {t:'「意思是：如果新版其實沒問題，要剛好看到這麼大的差距，機率小到幾乎不可能。所以可以很有把握地說，付款成功率從 {{andOld}} 掉到 {{andNew}} 是新版本造成的，不是運氣不好。」',ok:true,fb:'把統計結論翻譯成「有多確定」和「代表什麼」，對方才能據此做決策。'},
+    {t:'「統計很複雜，相信我就對了。」',fb:'不解釋就要別人相信，對方很難據此做決策，也很難幫你說服其他人。'},
+    {t:'「z 值越大越好，所以新版本表現很好。」',fb:'方向錯了。z 值大代表兩版差異明顯，這裡是舊版比新版好很多。'}
+   ]},
+  {id:'p6s4',type:'choice',skill:'portfolio',prompt:'林經理：「你這幾週做的分析很不錯。如果要放進 GitHub 當作品集，你會怎麼整理？」',
+   options:[
+    {t:'只上傳 .ipynb 檔，讓程式碼自己說話。',fb:'面試官通常只花一兩分鐘看一個專案，沒有說明很難看出重點。'},
+    {t:'把 20 個練習檔全部放上去，數量越多越好。',fb:'精選兩三個完整專案，比 20 個片段更有說服力。'},
+    {t:'README 先寫商業問題和結論，再寫資料、清理步驟、分析方法、關鍵圖表與建議；notebook 保留文字解說，並附上 SQL 和 Pandas 兩種解法。',ok:true,fb:'讓面試官 30 秒內看懂你解決了什麼問題、帶來什麼影響，再讓有興趣的人往下看細節。'},
+    {t:'不用放，作品集對轉職沒幫助。',fb:'轉職者缺少相關工作經歷，作品集是證明能力最直接的方式。'}
+   ]}
+ ],
+ resume:'以兩比例 z 檢定驗證 App 新版本對付款成功率的影響（z = {{zval}}），並以非技術語言向決策者說明。',
+ tip:'會算統計是加分，能把統計講成「所以我們該怎麼做」才是讓你被錄取的關鍵。'}
+];
+const ALLSTEPS=CHAPTERS.flatMap(c=>c.steps);
+const LEVELS=[[0,'實習分析師'],[250,'初級分析師'],[700,'數據分析師'],[1200,'資深分析師'],[1750,'分析主管']];
+const DOCS={
+ stores:['門市',{store_id:'門市編號',name:'門市名稱',city:'城市',open_date:'開幕日'}],
+ products:['品項',{product_id:'品項編號',name:'品名',category:'類別',price:'售價',cost:'成本'}],
+ customers:['會員',{customer_id:'會員編號',name:'姓名',city:'居住城市',signup_date:'註冊日',member_tier:'一般 / 銀卡 / 金卡'}],
+ orders:['訂單',{order_id:'訂單編號',customer_id:'會員（散客為缺值）',store_id:'門市',order_date:'訂單日期',channel:'門市 / 外送 / App自取',coupon_code:'優惠碼'}],
+ order_items:['訂單明細',{order_id:'訂單編號',product_id:'品項',qty:'杯數',unit_price:'實收單價'}],
+ coupons:['優惠活動',{coupon_code:'優惠碼',campaign:'活動名稱',discount:'折扣內容',start_date:'開始',end_date:'結束'}],
+ app_events:['App 行為',{event_id:'事件編號',session_id:'工作階段',user_id:'會員',platform:'iOS / Android',app_version:'App 版本',event_name:'事件名稱',event_date:'日期'}],
+ survey:['滿意度問卷（未清理）',{response_id:'填答編號',store:'門市（自由填寫）',score:'分數（自由填寫）',comment:'留言',submitted_at:'填答日期'}]
+};
+
+/* ---------- data generator (same seed as the SQL edition) ---------- */
+function genData(){
+  const R=mulberry32(20261109);
+  const pick=a=>a[Math.floor(R()*a.length)];
+  const wpick=(items,w)=>{let s=0;for(const x of w)s+=x;let r=R()*s;for(let i=0;i<items.length;i++){r-=w[i];if(r<0)return items[i]}return items[items.length-1]};
+  const day=864e5, ds=t=>new Date(t).toISOString().slice(0,10);
+  const D={stores:[],products:[],customers:[],coupons:[],orders:[],order_items:[],app_events:[],survey:[]};
+  const STORES=[[1,'台北信義店','台北','2023-03-01',16],[2,'台北中山店','台北','2024-06-15',12],[3,'台中勤美店','台中','2023-09-10',13],[4,'高雄駁二店','高雄','2025-01-20',9],[5,'新竹巨城店','新竹','2025-08-01',8]];
+  STORES.forEach(s=>D.stores.push(s.slice(0,4)));
+  const PROD=[[1,'經典紅茶','純茶',35,8],[2,'茉莉綠茶','純茶',35,8],[3,'烏龍青茶','純茶',40,10],[4,'珍珠鮮奶茶','鮮奶茶',65,22],[5,'芋泥鮮奶','鮮奶茶',75,28],[6,'黑糖鮮奶','鮮奶茶',70,24],[7,'抹茶拿鐵','鮮奶茶',80,30],[8,'百香綠茶','果茶',55,18],[9,'芒果冰沙','果茶',85,32],[10,'檸檬多多','果茶',60,20],[11,'冬瓜檸檬','果茶',50,15],[12,'珍珠加料','加料',10,3]];
+  PROD.forEach(p=>D.products.push(p.slice()));
+  D.coupons.push(['SUMMER20','夏日全品項 8 折','全品項 8 折','2026-07-01','2026-08-31'],['NEW10','會員 9 折','全品項 9 折','2026-01-01','2026-12-31'],['MILK50','App 鮮奶茶半價','鮮奶茶 5 折（限 App 自取）','2026-10-01','2026-10-31']);
+  const SUR='陳林黃張李王吳劉蔡楊許鄭謝郭洪曾邱廖賴周'.split('');
+  const GIV=['怡君','雅婷','家豪','志明','淑芬','宗翰','冠宇','欣怡','承恩','品妍','柏翰','詩涵','俊傑','佳穎','宥廷','子晴','建宏','美玲','偉倫','思妤'];
+  const CITIES=['台北','台中','高雄','新竹','桃園'];
+  const byCity={}, all=[];
+  for(let i=1;i<=600;i++){
+    const city=wpick(CITIES,[40,20,15,13,12]);
+    D.customers.push([i,pick(SUR)+pick(GIV),city,ds(Date.UTC(2025,0,1)+Math.floor(R()*546)*day),wpick(['一般','銀卡','金卡'],[70,22,8])]);
+    (byCity[city]=byCity[city]||[]).push(i); all.push(i);
+  }
+  const MF={7:1.08,8:1.12,9:1.0,10:0.95}, MF5={7:0.72,8:0.85,9:1.0,10:1.12};
+  const BASEW=[8,7,6,12,6,8,5,7,5,6,6,4];
+  const weights=(sid,m)=>{const w=BASEW.slice();
+    if(sid===3)w[4]=20; if(sid===3&&m===10)w[4]=0;
+    if(sid===4)w[10]=16; if(sid===5)w[5]=16;
+    if(m===7||m===8)w[8]*=2; if(m===10)w[8]*=0.5; return w};
+  const PIDS=PROD.map(p=>p[0]), MILK=[4,5,6,7];
+  let oid=1; const D0=Date.UTC(2026,6,1);
+  for(let d=0;d<123;d++){
+    const t=D0+d*day, date=ds(t), dt=new Date(t), m=dt.getUTCMonth()+1, wd=dt.getUTCDay();
+    const wkf=(wd===0||wd===6)?1.3:1;
+    for(const s of STORES){
+      const sid=s[0]; let f=(sid===5?MF5:MF)[m]; if(sid===3&&m===10)f*=0.62;
+      const n=Math.round(s[4]*f*wkf*(0.8+R()*0.4)); const w=weights(sid,m);
+      for(let k=0;k<n;k++){
+        const channel=wpick(['門市','外送','App自取'],[55,25,20]);
+        let cust=null;
+        if(channel==='App自取'||R()<0.62){const pool=(R()<0.85&&byCity[s[2]])?byCity[s[2]]:all;cust=pick(pool)}
+        let coupon=null;
+        if(channel==='App自取'&&m===10&&R()<0.6)coupon='MILK50';
+        else if(m<=8&&R()<0.18)coupon='SUMMER20';
+        else if(cust&&R()<0.05)coupon='NEW10';
+        const nItems=wpick([1,2,3,4],channel==='外送'?[22,40,24,14]:[52,30,13,5]);
+        const lines=new Map();
+        for(let i=0;i<nItems;i++){
+          const p=(i===0&&coupon==='MILK50')?wpick(MILK,MILK.map(id=>w[id-1])):wpick(PIDS,w);
+          lines.set(p,(lines.get(p)||0)+wpick([1,2],[82,18]));
+        }
+        D.orders.push([oid,cust,sid,date,channel,coupon]);
+        for(const [p,q] of lines){
+          const pr=PROD[p-1]; let disc=1;
+          if(coupon==='SUMMER20')disc=0.8; else if(coupon==='NEW10')disc=0.9; else if(coupon==='MILK50'&&pr[2]==='鮮奶茶')disc=0.5;
+          D.order_items.push([oid,p,q,Math.round(pr[3]*disc)]);
+        }
+        oid++;
+      }
+    }
+  }
+  const STEPS=['open_app','view_menu','add_to_cart','checkout','payment_success'];
+  let eid=1;
+  for(let sid=1;sid<=3000;sid++){
+    const plat=R()<0.5?'iOS':'Android', dd=1+Math.floor(R()*31), date='2026-10-'+String(dd).padStart(2,'0');
+    const ver=(plat==='Android'&&dd>=15)?'5.3.0':'5.2.0', uid=1+Math.floor(R()*600);
+    const p=[1,0.82,0.46,0.72,plat==='iOS'?0.93:(ver==='5.3.0'?0.56:0.91)];
+    for(let i=0;i<5;i++){
+      if(R()>=p[i])break;
+      D.app_events.push([eid++,sid,uid,plat,ver,STEPS[i],date]);
+      if((i===1&&R()<0.3)||(i===2&&R()<0.25)) D.app_events.push([eid++,sid,uid,plat,ver,STEPS[i],date]);
+    }
+  }
+  // messy survey
+  const Q=mulberry32(777);
+  const qp=a=>a[Math.floor(Q()*a.length)];
+  const qw=(items,w)=>{let s=0;for(const x of w)s+=x;let r=Q()*s;for(let i=0;i<items.length;i++){r-=w[i];if(r<0)return items[i]}return items[items.length-1]};
+  const VAR={'台北信義店':['台北信義店',' 台北信義店','信義店','台北 信義店'],'台北中山店':['台北中山店','中山店','台北中山店 '],'台中勤美店':['台中勤美店','勤美店','台中 勤美'],'高雄駁二店':['高雄駁二店','駁二店','高雄駁二'],'新竹巨城店':['新竹巨城店','巨城店','新竹巨城']};
+  const BASE={'台北信義店':8.2,'台北中山店':7.8,'台中勤美店':6.3,'高雄駁二店':8.0,'新竹巨城店':8.5};
+  const COM=['好喝','店員很親切','等太久了','甜度剛好','珍珠很Q','希望座位多一點',''];
+  const rows=[];
+  for(let i=1;i<=400;i++){
+    const store=qw(Object.keys(BASE),[26,20,22,16,16]);
+    const g=(Q()+Q()+Q()-1.5)*1.6;
+    const s=Math.max(1,Math.min(10,Math.round(BASE[store]+g)));
+    const r=Q();
+    const score=r<0.70?String(s):r<0.82?s+'分':r<0.90?' '+s+' ':r<0.95?null:qp(['11','0','99','十','N/A']);
+    const comment=(store==='台中勤美店'&&Q()<0.4)?'芋泥什麼時候回來？':qp(COM);
+    rows.push([i,qp(VAR[store]),score,comment,'2026-10-'+String(1+Math.floor(Q()*31)).padStart(2,'0')]);
+  }
+  for(let k=0;k<24;k++)rows.push(rows[Math.floor(Q()*400)].slice());
+  for(let i=rows.length-1;i>0;i--){const j=Math.floor(Q()*(i+1));[rows[i],rows[j]]=[rows[j],rows[i]]}
+  D.survey=rows;
+  return D;
+}
+
+const PY_SETUP=String.raw`
+import pandas as pd, numpy as np, json, math, io, contextlib, traceback, warnings
+from pyodide.code import eval_code
+from pandas.api.types import is_integer_dtype
+warnings.filterwarnings('ignore')
+pd.set_option('display.width', 120)
+_raw = json.loads(RAW_JSON)
+_cols = {
+ 'stores': ['store_id','name','city','open_date'],
+ 'products': ['product_id','name','category','price','cost'],
+ 'customers': ['customer_id','name','city','signup_date','member_tier'],
+ 'coupons': ['coupon_code','campaign','discount','start_date','end_date'],
+ 'orders': ['order_id','customer_id','store_id','order_date','channel','coupon_code'],
+ 'order_items': ['order_id','product_id','qty','unit_price'],
+ 'app_events': ['event_id','session_id','user_id','platform','app_version','event_name','event_date'],
+ 'survey': ['response_id','store','score','comment','submitted_at'],
+}
+_BASE = {k: pd.DataFrame(_raw[k], columns=c) for k, c in _cols.items()}
+_BASE['orders']['customer_id'] = _BASE['orders']['customer_id'].astype('Int64')
+_BASE['orders']['order_date'] = pd.to_datetime(_BASE['orders']['order_date'])
+_BASE['app_events']['event_date'] = pd.to_datetime(_BASE['app_events']['event_date'])
+del _raw
+
+def _cell(v):
+    if v is None: return None
+    try:
+        if pd.isna(v): return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(v, (bool, np.bool_)): return bool(v)
+    if isinstance(v, (int, np.integer)): return int(v)
+    if isinstance(v, (float, np.floating)):
+        f = float(v)
+        return str(f) if math.isinf(f) else f
+    if isinstance(v, str): return v
+    return str(v)
+
+def _needs_reset(idx):
+    return any(n is not None for n in idx.names) or not is_integer_dtype(idx.dtype)
+
+def _table(obj):
+    if isinstance(obj, pd.Series):
+        if _needs_reset(obj.index):
+            try: obj = obj.reset_index()
+            except ValueError: obj = obj.reset_index(drop=True).to_frame()
+        else:
+            obj = obj.to_frame(obj.name if obj.name is not None else 'value')
+    elif isinstance(obj, pd.DataFrame):
+        if _needs_reset(obj.index):
+            try: obj = obj.reset_index()
+            except ValueError: obj = obj.reset_index(drop=True)
+    elif isinstance(obj, (bool, int, float, str, np.generic)):
+        obj = pd.DataFrame({'value': [obj]})
+    else:
+        return None
+    cols = [' / '.join(map(str, c)) if isinstance(c, tuple) else str(c) for c in obj.columns]
+    vals = [[_cell(v) for v in row] for row in obj.itertuples(index=False, name=None)]
+    return {'columns': cols, 'values': vals}
+
+def _run(code):
+    ns = {'pd': pd, 'np': np}
+    for k, v in _BASE.items(): ns[k] = v.copy()
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            res = eval_code(code, ns, return_mode='last_expr')
+    except BaseException as e:
+        line = None
+        for fr in traceback.extract_tb(e.__traceback__):
+            if fr.filename == '<exec>': line = fr.lineno
+        if isinstance(e, SyntaxError): line = e.lineno
+        msg = ''.join(traceback.format_exception_only(type(e), e)).strip()
+        return json.dumps({'err': msg, 'etype': type(e).__name__, 'line': line, 'stdout': buf.getvalue()}, ensure_ascii=False)
+    out = {'stdout': buf.getvalue()}
+    if res is None:
+        out['none'] = True
+    else:
+        t = _table(res)
+        if t is None: out['repr'] = repr(res)[:3000]
+        else: out['table'] = t
+    return json.dumps(out, ensure_ascii=False)
+
+def _schema():
+    return json.dumps({k: {'rows': len(v), 'cols': [[c, str(t)] for c, t in v.dtypes.items()]} for k, v in _BASE.items()}, ensure_ascii=False)
+`;
+
+/* ---------- state ---------- */
+const KEY='analyst-quest-pandas-v1';
+const blank=()=>({solved:{},hints:{},sol:{},wrong:{},drafts:{},picked:{},view:{ch:0,step:0}});
+let S=(()=>{try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.solved)return Object.assign(blank(),s)}catch(e){}return blank()})();
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+let py=null, pyRun=null, ready=false, loadMsg='正在下載 Python 執行環境（第一次約需 15–30 秒）…', EXP={}, V={}, SCHEMA=null;
+const fill=s=>String(s).replace(/\{\{(\w+)\}\}/g,(_,k)=>V[k]!=null?V[k]:'…');
+const totalXP=()=>Object.values(S.solved).reduce((a,b)=>a+b,0);
+function levelOf(xp){let i=0;LEVELS.forEach((l,j)=>{if(xp>=l[0])i=j});return i}
+const codeXP=st=>S.sol[st.id]?20:Math.max(40,100-25*(S.hints[st.id]||0));
+const choiceXP=st=>{const w=S.wrong[st.id]||0;return w===0?50:w===1?25:10};
+const solved=id=>id in S.solved;
+const chDone=c=>c.steps.every(s=>solved(s.id));
+const chOpen=i=>i===0||chDone(CHAPTERS[i-1]);
+const stepOpen=(c,j)=>j===0||solved(c.steps[j-1].id);
+
+/* ---------- python bridge ---------- */
+function runPy(code){return JSON.parse(pyRun(code))}
+function explainErr(r){
+  const m=r.err||'', t=r.etype, ln=r.line?`（第 ${r.line} 行）`:'';
+  let x;
+  if(t==='KeyError'){x=m.match(/KeyError: (.+)/);return `找不到欄位或索引 ${esc(x?x[1]:'')}${ln}。檢查欄位名稱的拼字，欄位都列在資料表清單裡。`}
+  if(t==='NameError'){x=m.match(/name '(.+?)'/);return `變數「${esc(x?x[1]:'')}」不存在${ln}。可用的表格有：${Object.keys(DOCS).join('、')}。`}
+  if(t==='AttributeError'){x=m.match(/has no attribute '(.+?)'/);return `這個物件沒有「${esc(x?x[1]:'')}」這個方法或欄位${ln}。欄位請用 <code>df['欄位']</code> 的寫法，也檢查一下拼字。`}
+  if(t==='SyntaxError'||t==='IndentationError')return `語法錯誤${ln}：檢查括號、引號、冒號和縮排是否正確。`;
+  if(t==='TypeError')return `型別不符${ln}：例如把文字和數字放在一起運算，或函式參數給錯了。`;
+  if(t==='ValueError')return `數值不符合要求${ln}：例如格式轉換失敗，或兩個表格的長度對不上。`;
+  if(t==='MergeError')return `合併失敗${ln}：檢查 <code>on=</code> 的欄位兩邊都有。`;
+  return `Python 回報了錯誤${ln}。`;
+}
+function eq(a,b){
+  if(a===null||b===null)return a===b;
+  if(typeof b==='number'){const x=typeof a==='number'?a:parseFloat(a);if(!isFinite(x))return false;return Math.abs(x-b)<=Math.max(0.006,Math.abs(b)*0.004)}
+  return String(a).trim()===String(b).trim();
+}
+const rowKey=r=>r.map(x=>x===null?'~':typeof x==='number'?x.toFixed(2):String(x).trim()).join('\u0001');
+const sortRows=v=>[...v].sort((a,b)=>{const x=rowKey(a),y=rowKey(b);return x<y?-1:x>y?1:0});
+function diff(U,E){for(let i=0;i<E.length;i++)for(let j=0;j<E[i].length;j++)if(!eq(U[i][j],E[i][j]))return [i,j];return null}
+function check(u,e,ordered){
+  if(u.columns.length!==e.columns.length)return `欄位數不符：任務需要 ${e.columns.length} 欄，你的結果有 ${u.columns.length} 欄。${u.columns.length>e.columns.length?'只保留任務要求的欄位。':''}`;
+  if(u.values.length!==e.values.length)return `列數不符：預期 ${e.values.length} 列，你的結果有 ${u.values.length} 列。檢查篩選條件或分組方式。`;
+  const d0=diff(sortRows(u.values),sortRows(e.values));
+  if(!d0){if(ordered&&diff(u.values,e.values))return '數值都對了，但排序不符合任務要求。';return null}
+  const U=ordered?u.values:sortRows(u.values),E=ordered?e.values:sortRows(e.values);
+  const [i,j]=diff(U,E)||d0, a=U[i][j], b=E[i][j];
+  let extra='';
+  if(typeof a==='number'&&typeof b==='number'&&b!==0&&Math.abs(a/b-100)<0.6)extra='比率請用 0 到 1 之間的小數，不用乘 100。';
+  return `第 ${i+1} 列第 ${j+1} 欄的值不符合。${extra}${ordered?'':'（比對時不看列的順序）'}`;
+}
+function tableHTML(t,limit=200){
+  const rows=t.values.slice(0,limit);
+  return `<div class="tbl-wrap"><table><thead><tr>${t.columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(v=>v===null?'<td><span class="nul">NaN</span></td>':`<td class="${typeof v==='number'?'num':''}">${esc(typeof v==='number'&&!Number.isInteger(v)?+v.toFixed(4):v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="meta">${t.values.length} 列 × ${t.columns.length} 欄${t.values.length>limit?`，只顯示前 ${limit} 列`:''}</p>`;
+}
+function resultHTML(r){
+  let h='';
+  if(r.stdout)h+=`<pre class="stdout">${esc(r.stdout)}</pre>`;
+  if(r.err)return h+`<div class="fb bad">${explainErr(r)}<span class="raw">${esc(r.err)}</span></div>`;
+  if(r.table)h+=tableHTML(r.table);
+  else if(r.repr!=null)h+=`<pre class="stdout">${esc(r.repr)}</pre>`;
+  else if(!r.stdout)h+='<p class="meta">程式執行完畢，最後一行沒有回傳結果。</p>';
+  return h;
+}
+
+function computeVars(){
+  const one=id=>EXP[id].values[0][0];
+  const rows=SCHEMA.survey.rows, dup=one('p3s1'), valid=one('p3s2');
+  V.rawRows=rows; V.dupRows=dup; V.invalidShare=pct0(1-valid/(rows-dup));
+  const tc=EXP.p3s3.values.find(r=>r[0]==='台中勤美店'); V.tcScore=tc?tc[1].toFixed(2):'…';
+  const ch=EXP.p5s3.values.find(r=>r[0]==='流失風險'); V.churnCount=ch?ch[1]:'…';
+  V.zval=one('p6s2').toFixed(2);
+  const rate=(p,v)=>{const r=EXP.p6s1.values.find(x=>x[0]===p&&x[1]===v);return r?pct1(r[2]):'…'};
+  V.andOld=rate('Android','5.2.0'); V.andNew=rate('Android','5.3.0');
+  const wk=EXP.p4s3.values, wd=wk.find(r=>r[0]==='平日'), we=wk.find(r=>r[0]==='週末');
+  V.wkGap=(wd&&we)?'+'+pct0(we[1]/wd[1]-1):'…';
+}
+
+/* ---------- rendering ---------- */
+function renderHeader(){
+  const xp=totalXP(), li=levelOf(xp), cur=LEVELS[li], nxt=LEVELS[li+1];
+  $('#lvl').textContent=cur[1];
+  $('#xpfill').style.width=(nxt?Math.min(100,(xp-cur[0])/(nxt[0]-cur[0])*100):100)+'%';
+  $('#xptext').textContent=nxt?`${xp} XP · 距離「${nxt[1]}」還差 ${nxt[0]-xp}`:`${xp} XP · 已達最高職級`;
+}
+function renderQueue(){
+  const v=S.view; let h='<h3>工單佇列</h3>';
+  CHAPTERS.forEach((c,i)=>{
+    const n=c.steps.filter(s=>solved(s.id)).length, open=chOpen(i);
+    h+=`<button class="qitem ${v.ch===i&&!v.mode?'on':''}" data-ch="${i}" ${open?'':'disabled'} type="button"><span class="qno">${c.no}</span><span class="qt">${c.title}</span><span class="qp">${open?`<span class="dots">${c.steps.map(s=>`<b class="${solved(s.id)?'y':''}"></b>`).join('')}</span>${n===c.steps.length?'已結案':`${n}/${c.steps.length}`}`:'完成上一張工單後開放'}</span></button>`;
+  });
+  h+=`<div class="qsep"></div>
+  <button class="qitem ${v.mode==='sandbox'?'on':''}" data-mode="sandbox" type="button"><span class="qno">PY</span><span class="qt">自由練習</span><span class="qp">隨意寫 Pandas，不計分</span></button>
+  <button class="qitem ${v.mode==='skills'?'on':''}" data-mode="skills" type="button"><span class="qno">CV</span><span class="qt">技能樹與履歷</span><span class="qp">${Object.keys(S.solved).length}/${ALLSTEPS.length} 項任務完成</span></button>`;
+  $('#queue').innerHTML=h;
+  $('#queue').querySelectorAll('[data-ch]').forEach(b=>b.onclick=()=>{const i=+b.dataset.ch,c=CHAPTERS[i];let j=c.steps.findIndex(s=>!solved(s.id));if(j<0)j=c.steps.length;go({ch:i,step:j})});
+  $('#queue').querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>go({mode:b.dataset.mode,ch:S.view.ch,step:S.view.step}));
+}
+function go(view){S.view=view;save();renderQueue();renderMain();window.scrollTo({top:0,behavior:'smooth'})}
+function ticketHTML(c,cur){
+  return `<article class="ticket"><div class="thead"><span class="tno">工單 ${c.no}</span><span class="pri ${c.pri.toLowerCase()}">${c.pri}</span><span>來自 ${c.who.name}（${c.who.role}）</span></div>
+    <h2>${c.title}</h2>
+    <div class="msg"><div class="avatar" aria-hidden="true">${c.who.i}</div><div class="bubble"><small>${c.who.name}</small>${fill(c.intro)}</div></div>
+    <ol class="steps">${c.steps.map((s,j)=>`<li><button type="button" data-step="${j}" class="${j===cur?'on':''} ${solved(s.id)?'y':''}" ${stepOpen(c,j)?'':'disabled'}>${j+1}. ${s.type==='code'?'Python':'判斷'}</button></li>`).join('')}
+    ${chDone(c)?`<li><button type="button" data-step="${c.steps.length}" class="${cur===c.steps.length?'on':''}">結案報告</button></li>`:''}</ol></article>`;
+}
+const loadingHTML=()=>ready?'':`<div class="loading"><i></i><span>${esc(loadMsg)}</span></div>`;
+function renderMain(){
+  const v=S.view, m=$('#main');
+  if(v.mode==='skills'){m.innerHTML=skillsHTML();return}
+  if(v.mode==='sandbox'){renderSandbox();return}
+  let ci=v.ch||0; if(!chOpen(ci))ci=0;
+  const c=CHAPTERS[ci]; let j=Math.min(v.step||0,c.steps.length);
+  if(j===c.steps.length&&!chDone(c))j=c.steps.findIndex(s=>!solved(s.id));
+  if(j<c.steps.length&&!stepOpen(c,j))j=c.steps.findIndex(s=>!solved(s.id));
+  S.view={ch:ci,step:j};
+  const body=j===c.steps.length?closedHTML(c,ci):c.steps[j].type==='code'?codeHTML(c.steps[j]):choiceHTML(c,c.steps[j]);
+  m.innerHTML=ticketHTML(c,j)+body;
+  m.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>go({ch:ci,step:+b.dataset.step}));
+  if(j===c.steps.length){const nb=$('#next-ch');if(nb)nb.onclick=()=>go(ci+1<CHAPTERS.length?{ch:ci+1,step:0}:{mode:'skills'});return}
+  const st=c.steps[j];
+  if(st.type==='code')wireCode(ci,j,st); else wireChoice(ci,j,st);
+}
+const nextBtn=()=>`<button class="btn primary" id="next" type="button">下一步</button>`;
+function editorKeys(ed,run){
+  ed.onkeydown=e=>{
+    if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();run()}
+    else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ed.selectionStart;ed.setRangeText('    ',s,ed.selectionEnd,'end');ed.dispatchEvent(new Event('input'))}
+  };
+}
+function codeHTML(st){
+  const done=solved(st.id), used=S.hints[st.id]||0;
+  return `<section class="task">
+    <div class="task-head"><span class="kind">Python 任務</span><span class="chip">${SKILLS[st.skill].n}</span><span class="xpchip">${done?`已獲得 ${S.solved[st.id]} XP`:`+${codeXP(st)} XP`}</span></div>
+    <p class="prompt">${st.prompt}</p>
+    <div class="out"><span>最後一行要回傳</span><code>${st.out}</code></div>
+    ${loadingHTML()}
+    <label class="sr" for="code-editor">Python 編輯器</label>
+    <textarea id="code-editor" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="# 在這裡寫 Python，最後一行的結果會拿來比對&#10;products.head()">${esc(S.drafts[st.id]||'')}</textarea>
+    <div class="actions">
+      <button class="btn primary" id="run" type="button" ${ready?'':'disabled'}>${ready?'執行程式':'Python 載入中…'}</button><span class="kbd">Ctrl / ⌘ + Enter</span>
+      <span class="spacer"></span>
+      ${done?'':`<button class="btn" id="hint" type="button" ${used>=st.hints.length||S.sol[st.id]?'disabled':''}>提示 ${used}/${st.hints.length}（−25 XP）</button><button class="btn" id="sol" type="button">看解答</button>`}
+    </div>
+    <div class="hints">${st.hints.slice(0,used).map(h=>`<div class="hint">${h}</div>`).join('')}</div>
+    <div id="fb">${done?`<div class="fb ok"><strong>過關！</strong>結果符合需求。參考寫法（同一個答案通常有很多種寫法）：<pre class="sol">${esc(st.solution)}</pre><div class="actions" style="margin-top:10px">${nextBtn()}</div></div>`:S.sol[st.id]?`<div class="fb info">參考解答（本題改為 20 XP，自己打一次或貼上執行就能過關）：<pre class="sol">${esc(st.solution)}</pre></div>`:''}</div>
+    <div id="result"></div>
+  </section>`;
+}
+function wireCode(ci,j,st){
+  const ed=$('#code-editor'), out=$('#result');
+  ed.oninput=()=>{S.drafts[st.id]=ed.value;save()};
+  const run=()=>{
+    if(!ready)return; const q=ed.value; if(!q.trim()){out.innerHTML='<p class="meta">先寫一段程式再執行。</p>';return}
+    const r=runPy(q); out.innerHTML=resultHTML(r);
+    if(solved(st.id)||r.err)return;
+    const fb=$('#fb');
+    if(!r.table){fb.innerHTML=`<div class="fb info">還差一點：${r.none?'最後一行沒有回傳任何東西。把要比對的結果（變數名稱或運算式）寫在最後一行。':'請回傳 DataFrame、Series 或單一數值。'}</div>`;return}
+    const msg=check(r.table,EXP[st.id],!!st.ordered);
+    if(msg===null){
+      const before=levelOf(totalXP()); S.solved[st.id]=codeXP(st); save();
+      const after=levelOf(totalXP());
+      toast(after>before?`升職！你現在是「${LEVELS[after][1]}」`:`+${S.solved[st.id]} XP`);
+      renderHeader(); renderQueue(); renderMain(); $('#result').innerHTML=resultHTML(r);
+    } else fb.innerHTML=`<div class="fb info">還差一點：${msg}</div>`;
+  };
+  editorKeys(ed,run);
+  $('#run').onclick=run;
+  const nx=$('#next'); if(nx)nx.onclick=()=>go({ch:ci,step:j+1});
+  const hb=$('#hint'); if(hb)hb.onclick=()=>{S.hints[st.id]=(S.hints[st.id]||0)+1;save();renderMain()};
+  const sb=$('#sol'); if(sb){let armed=false;sb.onclick=()=>{
+    if(!armed){armed=true;sb.textContent='再按一次：看解答本題只拿 20 XP';setTimeout(()=>{if(sb.isConnected){armed=false;sb.textContent='看解答'}},4000);return}
+    S.sol[st.id]=true;save();renderMain()}}
+}
+function choiceHTML(c,st){
+  const picked=S.picked[st.id]||[], done=solved(st.id);
+  return `<section class="task">
+    <div class="task-head"><span class="kind">情境判斷</span><span class="chip soft">${SKILLS[st.skill].n}</span><span class="xpchip">${done?`已獲得 ${S.solved[st.id]} XP`:`+${choiceXP(st)} XP`}</span></div>
+    <div class="msg"><div class="avatar" aria-hidden="true">${c.who.i}</div><div class="bubble"><small>${c.who.name}</small>${fill(st.prompt)}</div></div>
+    ${ready?'':'<p class="meta">選項裡的數字會在 Python 載入完成後出現。</p>'}
+    <div class="options">${st.options.map((o,k)=>{const p=picked.includes(k);const cls=p?(o.ok?'right':'wrong'):'';
+      return `<button class="opt ${cls}" data-k="${k}" type="button" ${done||p?'disabled':''}>${p?`<span class="tag">${o.ok?'最佳做法':'再想想'}</span>`:''}<span>${fill(o.t)}</span>${p?`<span class="ofb">${fill(o.fb)}</span>`:''}</button>`}).join('')}</div>
+    ${done?`<div class="actions">${nextBtn()}</div>`:''}
+  </section>`;
+}
+function wireChoice(ci,j,st){
+  $('#main').querySelectorAll('.opt').forEach(b=>b.onclick=()=>{
+    const k=+b.dataset.k, o=st.options[k];
+    S.picked[st.id]=[...(S.picked[st.id]||[]),k];
+    if(o.ok){const before=levelOf(totalXP());S.solved[st.id]=choiceXP(st);const after=levelOf(totalXP());toast(after>before?`升職！你現在是「${LEVELS[after][1]}」`:`+${S.solved[st.id]} XP`);renderHeader();renderQueue()}
+    else S.wrong[st.id]=(S.wrong[st.id]||0)+1;
+    save(); renderMain();
+  });
+  const nx=$('#next'); if(nx)nx.onclick=()=>go({ch:ci,step:j+1});
+}
+function closedHTML(c,ci){
+  const xp=c.steps.reduce((a,s)=>a+(S.solved[s.id]||0),0), skills=[...new Set(c.steps.map(s=>s.skill))];
+  return `<section class="task"><span class="stamp">已結案 · ${xp} XP</span>
+    <div class="skillgrid">${skills.map(k=>`<div class="sk y ${SKILLS[k].t==='s'?'s':''}"><b>${SKILLS[k].n}</b><span>${SKILLS[k].t==='s'?'軟實力':'硬實力'}</span></div>`).join('')}</div>
+    <div class="resume"><b>履歷可以這樣寫</b>${fill(c.resume)}</div>
+    <div class="resume"><b>職涯小提醒</b>${c.tip}</div>
+    <div class="actions"><button class="btn primary" id="next-ch" type="button">${ci+1<CHAPTERS.length?`前往下一張工單：${CHAPTERS[ci+1].title}`:'查看技能樹與履歷'}</button></div></section>`;
+}
+function skillsHTML(){
+  const got=new Set(ALLSTEPS.filter(s=>solved(s.id)).map(s=>s.skill));
+  const from=k=>CHAPTERS.find(c=>c.steps.some(s=>s.skill===k));
+  const grid=t=>Object.entries(SKILLS).filter(([,s])=>s.t===t).map(([k,s])=>`<div class="sk ${got.has(k)?'y':''} ${t==='s'?'s':''}"><b>${s.n}</b><span>${got.has(k)?'已解鎖':'未解鎖'} · ${from(k).no} ${from(k).title}</span></div>`).join('');
+  const done=CHAPTERS.filter(chDone);
+  return `<section class="task"><h2>技能樹</h2>
+    <p class="lead">Pandas 篇著重 SQL 比較難做的事：資料清理、時間序列、分群和統計檢定。搭配 SQL 篇一起完成，就是數據分析職缺最常見的「SQL + Python」組合。</p>
+    <div class="task-head"><span class="kind">硬實力 · Python / Pandas</span></div><div class="skillgrid">${grid('h')}</div>
+    <div class="task-head"><span class="kind" style="color:var(--amber)">軟實力 · 溝通與商業思維</span></div><div class="skillgrid">${grid('s')}</div></section>
+  <section class="task"><h2>你的履歷素材</h2>
+    ${done.length?done.map(c=>`<div class="resume"><b>${c.no} ${c.title}</b>${fill(c.resume)}</div>`).join(''):'<p class="lead">每結案一張工單，這裡就會多一條可以寫進履歷或作品集的成果描述。</p>'}</section>`;
+}
+function renderSandbox(){
+  const m=$('#main');
+  m.innerHTML=`<section class="task"><div class="task-head"><span class="kind">自由練習</span><span class="chip">不計分</span></div>
+    <h2>Pandas 練習場</h2>
+    <p class="lead">所有表格都已經載入成 DataFrame，<code>pd</code> 和 <code>np</code> 也準備好了。可以用 <code>print()</code> 印出中間結果。試著自己出題：哪個品項在外送最熱門？金卡會員平均多久來一次？</p>
+    ${loadingHTML()}
+    <label class="sr" for="code-editor">Python 編輯器</label>
+    <textarea id="code-editor" spellcheck="false" autocapitalize="off" autocomplete="off">${esc(S.drafts.sandbox||"orders.groupby('channel').size()")}</textarea>
+    <div class="actions"><button class="btn primary" id="run" type="button" ${ready?'':'disabled'}>${ready?'執行程式':'Python 載入中…'}</button><span class="kbd">Ctrl / ⌘ + Enter</span></div>
+    <div id="result"></div></section>`;
+  const ed=$('#code-editor'), out=$('#result');
+  ed.oninput=()=>{S.drafts.sandbox=ed.value;save()};
+  const run=()=>{if(ready)out.innerHTML=resultHTML(runPy(ed.value))};
+  editorKeys(ed,run); $('#run').onclick=run; if(ready)run();
+}
+function renderSchema(){
+  $('#schema').innerHTML=`<h3>資料表</h3><p class="lead">每張表都是一個 DataFrame，名稱直接拿來用，例如 <code>orders.head()</code>。資料與 SQL 篇相同，另加一張未清理的問卷。</p>
+  ${Object.entries(DOCS).map(([t,[zh,cols]],i)=>{const sc=SCHEMA&&SCHEMA[t];const types=sc?Object.fromEntries(sc.cols):{};
+    return `<details ${i<5||t==='survey'?'open':''}><summary><code>${t}</code><span>${zh}${sc?' · '+sc.rows.toLocaleString('en-US')+' 列':''}</span></summary>
+    <ul class="cols">${Object.entries(cols).map(([c,d])=>`<li><span style="text-align:left"><code>${c}</code>${types[c]?`<em>${types[c]}</em>`:''}</span><span>${d}</span></li>`).join('')}</ul>
+    <button class="pv" type="button" data-t="${t}">預覽 ${t}.head()</button><div class="pvbox" id="pv-${t}"></div></details>`}).join('')}`;
+  $('#schema').querySelectorAll('.pv').forEach(b=>b.onclick=()=>{
+    const box=$('#pv-'+b.dataset.t); if(box.innerHTML){box.innerHTML='';return}
+    if(!ready){box.innerHTML='<p class="meta">Python 載入完成後就能預覽。</p>';return}
+    const r=runPy(b.dataset.t+'.head()'); box.innerHTML=r.table?tableHTML(r.table,5).replace(/<p class="meta">.*<\/p>$/,''):'';
+  });
+}
+let tt; function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2400)}
+$('#btn-skills').onclick=()=>go({mode:'skills',ch:S.view.ch,step:S.view.step});
+(()=>{const b=$('#btn-reset');let armed=false;b.onclick=()=>{
+  if(!armed){armed=true;b.textContent='再按一次確認重置';b.classList.add('warn');setTimeout(()=>{armed=false;b.textContent='重置進度';b.classList.remove('warn')},3500);return}
+  S=blank();save();armed=false;b.textContent='重置進度';b.classList.remove('warn');renderHeader();go({ch:0,step:0});toast('進度已重置')}})();
+
+/* ---------- boot ---------- */
+function setLoad(msg){loadMsg=msg;const el=document.querySelector('.loading span');if(el)el.textContent=msg}
+renderHeader(); renderQueue(); renderMain(); renderSchema();
+(async()=>{
+  try{
+    if(typeof loadPyodide!=='function')throw new Error('Python 執行環境沒有下載成功');
+    py=await loadPyodide();
+    setLoad('正在載入 pandas…');
+    await py.loadPackage(['pandas']);
+    setLoad('正在建立拾光茶飲的資料…');
+    await new Promise(r=>setTimeout(r,30));
+    py.globals.set('RAW_JSON',JSON.stringify(genData()));
+    py.runPython(PY_SETUP);
+    pyRun=py.globals.get('_run');
+    SCHEMA=JSON.parse(py.globals.get('_schema')());
+    for(const s of ALLSTEPS.filter(s=>s.type==='code')){
+      const r=runPy(s.solution);
+      if(!r.table)throw new Error('參考解答執行失敗：'+s.id+' '+(r.err||''));
+      EXP[s.id]=r.table;
+    }
+    computeVars(); ready=true;
+    const ed=document.querySelector('#code-editor'); const keep=ed&&document.activeElement===ed;
+    renderMain(); renderSchema();
+    if(keep)document.querySelector('#code-editor').focus();
+  }catch(e){
+    setLoad('載入失敗：'+(e.message||e)+'。請重新整理頁面再試一次。');
+  }
+})();
+</script>
+</body>
+</html>
