@@ -1,0 +1,835 @@
+<title>分析師養成記</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: work-ticket desk. Chapter queue on the left, the open ticket + SQL console in the middle, the schema reference pinned on the right. */
+:root{
+  --bg:#EDF1EF; --surface:#FFFFFF; --sunk:#E2E8E5; --ink:#17231F; --muted:#56665F; --line:#C9D4CF;
+  --jade:#0E7A62; --on-jade:#FFFFFF; --jade-soft:#D3ECE3;
+  --amber:#B9671F; --amber-soft:#F5E3CF;
+  --ok:#1D7438; --ok-soft:#DBF0E0; --bad:#AE372B; --bad-soft:#F7DDD9;
+  --code-bg:#13201C; --code-ink:#D6ECE3; --code-dim:#7F9B91;
+  --f-display:"LXGW WenKai TC","Noto Serif TC","Songti TC",serif;
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",Consolas,"Courier New",monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1614; --surface:#17211E; --sunk:#1F2B27; --ink:#E1EBE7; --muted:#97A9A2; --line:#2D3B36;
+  --jade:#3CC29F; --on-jade:#05211A; --jade-soft:#173A31;
+  --amber:#E59D5A; --amber-soft:#3A2A1B;
+  --ok:#62CC84; --ok-soft:#163320; --bad:#F08074; --bad-soft:#3B1D1A;
+  --code-bg:#0A110F; --code-ink:#D6ECE3; --code-dim:#6F8A80; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1614; --surface:#17211E; --sunk:#1F2B27; --ink:#E1EBE7; --muted:#97A9A2; --line:#2D3B36;
+  --jade:#3CC29F; --on-jade:#05211A; --jade-soft:#173A31;
+  --amber:#E59D5A; --amber-soft:#3A2A1B;
+  --ok:#62CC84; --ok-soft:#163320; --bad:#F08074; --bad-soft:#3B1D1A;
+  --code-bg:#0A110F; --code-ink:#D6ECE3; --code-dim:#6F8A80; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.65}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;font-weight:700}
+code,.mono{font-family:var(--f-mono)}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--jade);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* header */
+.top{border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.top-in{max-width:1440px;margin:0 auto;padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px}
+.brand{display:flex;align-items:baseline;gap:10px;min-width:0}
+.brand h1{font-size:1.5rem;letter-spacing:.02em}
+.brand span{color:var(--muted);font-size:.85rem}
+.rank{display:flex;align-items:center;gap:12px;margin-left:auto;min-width:0;flex-wrap:wrap}
+.badge{font-family:var(--f-display);font-size:1rem;padding:2px 12px;border-radius:999px;background:var(--amber-soft);color:var(--amber);font-weight:700;white-space:nowrap}
+.xpbar{width:180px;max-width:40vw;height:8px;border-radius:99px;background:var(--sunk);overflow:hidden}
+.xpbar i{display:block;height:100%;background:var(--amber);border-radius:99px;transition:width .5s ease}
+.xptext{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tbtn{border:1px solid var(--line);background:transparent;border-radius:8px;padding:4px 12px;font-size:.85rem}
+.tbtn:hover{border-color:var(--jade);color:var(--jade)}
+.tbtn.warn{border-color:var(--bad);color:var(--bad)}
+.sync{font-size:.75rem;color:var(--muted);white-space:nowrap}
+.sync[data-s="ok"]{color:var(--ok)}
+.sync[data-s="bad"]{color:var(--bad)}
+
+/* frame */
+.app{max-width:1440px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;grid-template-columns:240px minmax(0,1fr) 290px;gap:20px;align-items:start}
+@media (max-width:1180px){.app{grid-template-columns:220px minmax(0,1fr)}.schema{grid-column:1/-1}}
+@media (max-width:760px){.app{grid-template-columns:minmax(0,1fr)}}
+
+/* chapter queue */
+.queue{display:flex;flex-direction:column;gap:6px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 76px)}
+.queue h3{font-family:var(--f-body);font-size:.75rem;letter-spacing:.12em;color:var(--muted);font-weight:500;margin:4px 4px 2px}
+.qitem{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;text-align:left;border:1px solid transparent;background:transparent;border-radius:10px;padding:8px 10px}
+.qitem:hover:not(:disabled){background:var(--surface)}
+.qitem.on{background:var(--surface);border-color:var(--line)}
+.qitem:disabled{opacity:.45;cursor:not-allowed}
+.qno{font-family:var(--f-mono);font-size:.72rem;color:var(--muted);grid-row:1/3;align-self:start;padding-top:3px}
+.qt{font-weight:500;font-size:.92rem;line-height:1.35}
+.qp{font-size:.75rem;color:var(--muted);display:flex;gap:6px;align-items:center}
+.dots{display:inline-flex;gap:3px}
+.dots b{width:7px;height:7px;border-radius:50%;background:var(--line)}
+.dots b.y{background:var(--jade)}
+.qsep{height:1px;background:var(--line);margin:8px 4px}
+@media (max-width:760px){
+  .queue{position:static;flex-direction:row;overflow-x:auto;padding-bottom:4px}
+  .queue h3,.qsep{display:none}
+  .qitem{flex:0 0 200px}
+}
+
+/* ticket */
+main{display:flex;flex-direction:column;gap:16px;min-width:0}
+.ticket{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px 22px;display:flex;flex-direction:column;gap:14px}
+.thead{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:.8rem;color:var(--muted)}
+.tno{font-family:var(--f-mono);letter-spacing:.04em}
+.pri{font-family:var(--f-mono);font-size:.72rem;padding:1px 8px;border-radius:6px;background:var(--sunk);color:var(--ink)}
+.pri.p1{background:var(--bad-soft);color:var(--bad)}
+.ticket h2{font-size:1.65rem}
+.msg{display:flex;gap:12px;align-items:flex-start}
+.avatar{flex:0 0 40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--jade-soft);color:var(--jade);font-family:var(--f-display);font-weight:700;font-size:1.05rem}
+.bubble{min-width:0;background:var(--sunk);border-radius:4px 14px 14px 14px;padding:10px 14px;font-family:var(--f-display);font-size:1.05rem;line-height:1.7}
+.bubble small{display:block;font-family:var(--f-body);font-size:.75rem;color:var(--muted);margin-bottom:2px}
+.steps{display:flex;flex-wrap:wrap;gap:6px;list-style:none;margin:0;padding:0}
+.steps button{border:1px solid var(--line);background:transparent;border-radius:999px;padding:3px 12px;font-size:.8rem;display:flex;gap:6px;align-items:center}
+.steps button.on{border-color:var(--jade);color:var(--jade);font-weight:500}
+.steps button.y::before{content:"✓";color:var(--jade);font-weight:700}
+.steps button:disabled{opacity:.4;cursor:not-allowed}
+
+/* task */
+.task{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px 22px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.task-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:.78rem}
+.kind{font-weight:700;letter-spacing:.08em;color:var(--jade)}
+.chip{padding:1px 10px;border-radius:999px;background:var(--sunk);color:var(--muted)}
+.chip.soft{background:var(--amber-soft);color:var(--amber)}
+.xpchip{margin-left:auto;font-family:var(--f-mono);color:var(--amber);font-weight:600}
+.prompt{margin:0;font-size:1.02rem;max-width:68ch}
+.out{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline;font-size:.85rem;background:var(--sunk);border-radius:8px;padding:8px 12px}
+.out span{color:var(--muted);font-size:.75rem;letter-spacing:.08em}
+.out code{font-size:.82rem;word-break:break-word}
+textarea{width:100%;min-height:170px;resize:vertical;background:var(--code-bg);color:var(--code-ink);border:1px solid var(--line);border-radius:10px;padding:14px;font-family:var(--f-mono);font-size:.88rem;line-height:1.6;tab-size:2}
+textarea::placeholder{color:var(--code-dim)}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 14px;font-size:.88rem}
+.btn:hover:not(:disabled){border-color:var(--jade)}
+.btn.primary{background:var(--jade);border-color:var(--jade);color:var(--on-jade);font-weight:500}
+.btn:disabled{opacity:.5;cursor:wait}
+.kbd{font-size:.75rem;color:var(--muted)}
+.spacer{flex:1}
+.hints{display:flex;flex-direction:column;gap:6px}
+.hint{border-left:3px solid var(--amber);background:var(--amber-soft);padding:6px 12px;border-radius:0 8px 8px 0;font-size:.9rem}
+.hint code,.prompt code,.fb code,.bubble code{font-size:.85em;background:var(--sunk);padding:0 4px;border-radius:4px}
+.hint code{background:transparent}
+.fb{border-radius:10px;padding:10px 14px;font-size:.92rem}
+.fb.bad{background:var(--bad-soft);color:var(--ink);border:1px solid var(--bad)}
+.fb.info{background:var(--sunk)}
+.fb.ok{background:var(--ok-soft);border:1px solid var(--ok)}
+.fb.ok strong{color:var(--ok)}
+.fb .raw{display:block;font-family:var(--f-mono);font-size:.75rem;color:var(--muted);margin-top:4px;word-break:break-word}
+pre.sol{margin:8px 0 0;background:var(--code-bg);color:var(--code-ink);border-radius:8px;padding:12px;font-family:var(--f-mono);font-size:.82rem;overflow-x:auto;white-space:pre}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;max-height:380px;overflow-y:auto}
+table{border-collapse:collapse;width:100%;font-size:.85rem;font-variant-numeric:tabular-nums}
+th,td{padding:6px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--sunk);font-family:var(--f-mono);font-weight:600;font-size:.78rem}
+td.num{text-align:right;font-family:var(--f-mono);font-size:.8rem}
+.nul{color:var(--muted);font-style:italic;font-family:var(--f-mono);font-size:.75rem}
+.meta{margin:4px 2px 0;font-size:.75rem;color:var(--muted)}
+
+/* choices */
+.options{display:flex;flex-direction:column;gap:8px}
+.opt{text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 14px;display:flex;flex-direction:column;gap:6px}
+.opt:hover:not(:disabled){border-color:var(--jade)}
+.opt:disabled{cursor:default}
+.opt .ofb{font-size:.86rem;color:var(--muted);border-top:1px dashed var(--line);padding-top:6px}
+.opt.wrong{border-color:var(--bad);background:var(--bad-soft)}
+.opt.wrong .ofb{color:var(--ink)}
+.opt.right{border-color:var(--ok);background:var(--ok-soft)}
+.opt.right .ofb{color:var(--ink)}
+.opt .tag{font-size:.72rem;font-weight:700;letter-spacing:.08em}
+.opt.wrong .tag{color:var(--bad)} .opt.right .tag{color:var(--ok)}
+
+/* summary + skills */
+.closed{display:flex;flex-direction:column;gap:12px}
+.stamp{align-self:flex-start;font-family:var(--f-display);font-size:1.1rem;color:var(--ok);border:2px solid var(--ok);border-radius:8px;padding:2px 14px;transform:rotate(-3deg)}
+.resume{background:var(--sunk);border-radius:10px;padding:12px 16px}
+.resume b{display:block;font-size:.72rem;letter-spacing:.1em;color:var(--muted);font-weight:500;margin-bottom:2px}
+.skillgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+.sk{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;opacity:.55}
+.sk.y{opacity:1;border-color:var(--jade);background:var(--jade-soft)}
+.sk.y.s{border-color:var(--amber);background:var(--amber-soft)}
+.sk b{font-weight:500}
+.sk span{font-size:.75rem;color:var(--muted)}
+.lead{margin:0;color:var(--muted);max-width:68ch}
+
+/* schema */
+.schema{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px;min-width:0;position:sticky;top:calc(env(safe-area-inset-top,0px) + 76px);max-height:calc(100vh - 100px);overflow-y:auto}
+@media (max-width:1180px){.schema{position:static;max-height:none}}
+.schema h3{font-size:1.15rem}
+.schema .lead{font-size:.8rem}
+details{border-top:1px solid var(--line);padding-top:6px}
+summary{cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:baseline;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary code{font-weight:600;font-size:.85rem;color:var(--jade)}
+summary span{font-size:.72rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.cols{list-style:none;margin:6px 0;padding:0;display:flex;flex-direction:column;gap:2px;font-size:.8rem}
+.cols li{display:flex;gap:8px;justify-content:space-between}
+.cols code{font-size:.76rem}
+.cols span{color:var(--muted);text-align:right;font-size:.75rem}
+.pv{font-size:.75rem;border:none;background:none;color:var(--jade);padding:0;text-decoration:underline;text-underline-offset:3px}
+.pvbox{margin-top:6px}
+.pvbox table{font-size:.72rem}
+.pvbox th,.pvbox td{padding:3px 6px}
+.toast{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:.9rem;z-index:20;transform:translateY(0);transition:opacity .3s,transform .3s}
+.toast[hidden]{display:block!important;opacity:0;transform:translateY(12px);pointer-events:none}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<header class="top"><div class="top-in">
+  <div class="brand"><h1>分析師養成記</h1><span>拾光茶飲 · 數據組新人訓練</span></div>
+  <div class="rank">
+    <span class="badge" id="lvl">實習分析師</span>
+    <div><div class="xpbar"><i id="xpfill" style="width:0%"></i></div><div class="xptext" id="xptext">0 XP</div></div>
+    <span class="sync" id="sync" role="status">進度存在這台裝置</span>
+    <button class="tbtn" id="btn-skills" type="button">技能樹</button>
+    <button class="tbtn" id="btn-reset" type="button">重置進度</button>
+  </div>
+</div></header>
+
+<div class="app">
+  <nav class="queue" id="queue" aria-label="案件列表"></nav>
+  <main id="main"></main>
+  <aside class="schema" id="schema" aria-label="資料表"></aside>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-asm.js"></script>
+<script>
+/* ---------- helpers ---------- */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const pct0=x=>Math.round(x*100)+'%';
+const pct1=x=>(x*100).toFixed(1)+'%';
+const nt=x=>'NT$'+Math.round(x).toLocaleString('en-US');
+
+/* ---------- skills ---------- */
+const SKILLS={
+  select:{n:'SELECT / WHERE / ORDER BY',t:'h'}, nullv:{n:'NULL 處理',t:'h'}, join:{n:'JOIN 多表關聯',t:'h'}, groupby:{n:'GROUP BY 與聚合',t:'h'},
+  date:{n:'日期函數 strftime',t:'h'}, casew:{n:'CASE WHEN 條件加總',t:'h'}, coalesce:{n:'COALESCE 空值替換',t:'h'}, margin:{n:'毛利與比率計算',t:'h'},
+  subq:{n:'子查詢 / EXISTS',t:'h'}, distinct:{n:'COUNT DISTINCT 漏斗',t:'h'}, having:{n:'HAVING 分組篩選',t:'h'}, windowf:{n:'視窗函數 RANK / LAG',t:'h'},
+  clarify:{n:'釐清需求與指標定義',t:'s'}, pyramid:{n:'結論先行的報告',t:'s'}, read:{n:'讀懂數據變化',t:'s'}, causal:{n:'因果思維與驗證',t:'s'},
+  badnews:{n:'溝通壞消息',t:'s'}, collab:{n:'跨部門協作',t:'s'}, exec:{n:'高層簡報',t:'s'}, star:{n:'STAR 面試敘事',t:'s'}
+};
+
+/* ---------- chapters ---------- */
+const CHAPTERS=[
+{id:'c1',no:'A-101',pri:'P3',title:'報到日：認識資料庫',who:{name:'林經理',role:'數據組主管',i:'林'},
+ intro:'歡迎加入拾光茶飲數據組！我們有 5 家門市，7 月到 10 月的訂單、會員、App 行為都在這個資料庫裡。右邊是資料表清單，可以點「預覽」看看每張表長什麼樣子。今天先暖身。',
+ steps:[
+  {id:'c1s1',type:'sql',skill:'select',prompt:'先熟悉菜單：列出所有<code>鮮奶茶</code>類別的品項名稱與售價，售價由高到低排列。',out:'name, price（依 price 由高到低）',ordered:true,
+   hints:["用 <code>WHERE category = '鮮奶茶'</code> 篩選類別。","排序用 <code>ORDER BY price DESC</code>。"],
+   solution:"SELECT name, price\nFROM products\nWHERE category = '鮮奶茶'\nORDER BY price DESC;"},
+  {id:'c1s2',type:'sql',skill:'select',prompt:'行銷想知道高價值會員有多少：會員等級（member_tier）為<code>金卡</code>的會員有幾位？',out:'一個數字',
+   hints:['計數用 <code>COUNT(*)</code>。',"會員資料在 <code>customers</code>，條件是 <code>member_tier = '金卡'</code>。"],
+   solution:"SELECT COUNT(*) AS gold_members\nFROM customers\nWHERE member_tier = '金卡';"},
+  {id:'c1s3',type:'sql',skill:'nullv',prompt:'不是每筆訂單都有會員資料。<code>orders</code> 裡 customer_id 是空值（NULL）的訂單有幾筆？',out:'一個數字',
+   hints:['<code>customer_id = NULL</code> 永遠不會成立，NULL 不能用等號比較。','改用 <code>WHERE customer_id IS NULL</code>。'],
+   solution:"SELECT COUNT(*) AS guest_orders\nFROM orders\nWHERE customer_id IS NULL;"},
+  {id:'c1s4',type:'choice',skill:'clarify',prompt:'老闆剛在群組問：「我們現在有多少客戶？」你幫忙回一下。',
+   options:[
+    {t:'「600 位！」（直接回 customers 表的總筆數）',fb:'600 是註冊會員數。你剛查到有不少訂單沒有會員資料，這些散客沒被算進去；老闆想知道的也可能是「最近還有在買的人」。'},
+    {t:'先確認口徑：「想確認一下，您要的是『註冊會員數』（600 位），還是『近 30 天有消費的活躍會員』？另外約 {{nullShare}} 的訂單是非會員散客，無法計算人數，我會一起標註。」',ok:true,fb:'一個數字背後一定有定義。先給可用的數字，同時點出口徑差異，老闆能馬上用，也不會誤解。'},
+    {t:'「資料不完整，沒辦法回答。」',fb:'太被動。資料永遠不完美，分析師的工作是在限制下給出最有用的答案，並把限制講清楚。'},
+    {t:'「{{orderCount}} 位」（orders 表的筆數）',fb:'訂單數不等於人數，同一位客人會買很多次。'}
+   ]}
+ ],
+ resume:'使用 SQL（SELECT、WHERE、ORDER BY）查詢 POS 與會員資料，並與主管對齊「客戶數」等核心指標定義。',
+ tip:'面試或工作中遇到模糊的問題，先問清楚定義是加分行為，不是在拖延。'},
+
+{id:'c2',no:'A-204',pri:'P2',title:'店長的週報',who:{name:'阿凱',role:'營運經理',i:'凱'},
+ intro:'嗨新同事！我每週要跟區經理報告各店狀況，以前都手動加 Excel，好痛苦。可以幫我直接從資料庫算嗎？',
+ steps:[
+  {id:'c2s1',type:'sql',skill:'join',prompt:'各門市的總營收（7–10 月全期間）。營收 = <code>SUM(qty × unit_price)</code>。品項明細在 <code>order_items</code>，要透過 <code>orders</code> 才連得到 <code>stores</code>。',out:'store_name, revenue（依 revenue 由高到低）',ordered:true,
+   hints:['<code>order_items</code> 用 order_id 連 <code>orders</code>，<code>orders</code> 用 store_id 連 <code>stores</code>。','<code>GROUP BY</code> 門市，再 <code>ORDER BY revenue DESC</code>。'],
+   solution:"SELECT s.name AS store_name,\n       SUM(oi.qty * oi.unit_price) AS revenue\nFROM order_items oi\nJOIN orders o ON o.order_id = oi.order_id\nJOIN stores s ON s.store_id = o.store_id\nGROUP BY s.store_id\nORDER BY revenue DESC;"},
+  {id:'c2s2',type:'sql',skill:'groupby',prompt:'各通路（channel）的訂單數與平均客單價。客單價 = 該通路總營收 ÷ 訂單數，四捨五入到整數。',out:'channel, orders, avg_order_value（依 orders 由多到少）',ordered:true,
+   hints:['JOIN 明細之後，一筆訂單會變成好幾列（一個品項一列），所以訂單數要用 <code>COUNT(DISTINCT o.order_id)</code>。','整數相除會捨去小數：先乘 <code>1.0</code> 再除，最後用 <code>ROUND(…)</code>。'],
+   solution:"SELECT o.channel,\n       COUNT(DISTINCT o.order_id) AS orders,\n       ROUND(SUM(oi.qty * oi.unit_price) * 1.0\n             / COUNT(DISTINCT o.order_id)) AS avg_order_value\nFROM orders o\nJOIN order_items oi ON oi.order_id = o.order_id\nGROUP BY o.channel\nORDER BY orders DESC;"},
+  {id:'c2s3',type:'choice',skill:'pyramid',prompt:'數字有了！幫我寫週報的第一段，區經理通常只看前兩行。',
+   options:[
+    {t:'「本週我先將 order_items 表 JOIN orders 與 stores，再依門市 GROUP BY 加總……」',fb:'區經理不在乎你怎麼算。方法放附錄，開頭放結論。'},
+    {t:'「各店表現都不錯，整體穩定，請參考附件 12 張圖表。」',fb:'沒有數字也沒有重點。「都不錯」是形容詞，不是洞察。'},
+    {t:'「結論：{{topStore}}貢獻全公司 {{topShare}} 營收，是最大支柱；外送客單價 {{deliveryAov}}，明顯高於門市的 {{storeAov}}，建議下週在外送平台主推雙杯套餐。各店明細見下表。」',ok:true,fb:'結論先行（金字塔原則）：先講「所以呢」，用一兩個關鍵數字支撐，再給可以執行的建議。'},
+    {t:'把五家店、三個通路的所有數字貼成一大段文字。',fb:'資訊全對，但讀者要自己找重點。分析師的價值就是幫讀者做取捨。'}
+   ]}
+ ],
+ resume:'以 JOIN 與 GROUP BY 自動化門市週報，取代手動 Excel 彙整，並以結論先行的方式呈現營運重點。',
+ tip:'週報開頭兩行決定別人會不會讀下去。先寫「所以呢」，再寫「怎麼算」。'},
+
+{id:'c3',no:'A-317',pri:'P1',title:'消失的營收',who:{name:'阿凱',role:'營運經理',i:'凱'},
+ intro:'緊急！區經理說台中那邊 10 月業績很差，但店長堅持「客人跟平常一樣多」。可以幫我查一下到底發生什麼事嗎？',
+ steps:[
+  {id:'c3s1',type:'sql',skill:'date',prompt:'先看全貌：每家店每個月的營收。',out:'store_name, month（格式 YYYY-MM）, revenue',
+   hints:["<code>strftime('%Y-%m', order_date)</code> 可以把日期轉成年月，<code>substr(order_date, 1, 7)</code> 也行。",'<code>GROUP BY</code> 門市和月份兩個欄位。'],
+   solution:"SELECT s.name AS store_name,\n       strftime('%Y-%m', o.order_date) AS month,\n       SUM(oi.qty * oi.unit_price) AS revenue\nFROM orders o\nJOIN order_items oi ON oi.order_id = o.order_id\nJOIN stores s ON s.store_id = o.store_id\nGROUP BY s.name, month\nORDER BY s.name, month;"},
+  {id:'c3s2',type:'choice',skill:'read',prompt:'看你剛剛的結果：9 月到 10 月，哪家店跌幅最大？',
+   options:[
+    {t:'台北信義店',fb:'再看一次 9 月和 10 月兩列，算一下每家店的變化百分比。信義店跌了一成多，但台中勤美店幾乎腰斬。'},
+    {t:'台中勤美店',ok:true,fb:'台中勤美店從 {{tcSep}} 掉到 {{tcOct}}，下滑 {{tcDrop}}。其他台北、高雄門市只是一成左右的季節性下滑，新竹甚至還在成長，所以這不是全公司的季節問題。'},
+    {t:'高雄駁二店',fb:'高雄是小幅下滑，跟大部分門市一樣，屬於天氣轉涼的季節性波動。'},
+    {t:'新竹巨城店',fb:'新竹巨城店其實是成長的。比較時記得看方向，不只看數字大小。'}
+   ]},
+  {id:'c3s3',type:'sql',skill:'casew',prompt:'下鑽到品項：台中勤美店（store_id = 3）9 月和 10 月，各品項分別賣出幾杯？沒賣出記 0。',out:'product_name, sep_qty, oct_qty',
+   hints:['條件加總：<code>SUM(CASE WHEN … THEN oi.qty ELSE 0 END)</code>，一個月一欄。',"月份判斷可以用 <code>strftime('%m', o.order_date) = '09'</code>。",'記得 <code>WHERE o.store_id = 3</code>，並 <code>GROUP BY</code> 品項。'],
+   solution:"SELECT p.name AS product_name,\n       SUM(CASE WHEN strftime('%m', o.order_date) = '09' THEN oi.qty ELSE 0 END) AS sep_qty,\n       SUM(CASE WHEN strftime('%m', o.order_date) = '10' THEN oi.qty ELSE 0 END) AS oct_qty\nFROM orders o\nJOIN order_items oi ON oi.order_id = o.order_id\nJOIN products p ON p.product_id = oi.product_id\nWHERE o.store_id = 3\n  AND o.order_date BETWEEN '2026-09-01' AND '2026-10-31'\nGROUP BY p.product_id\nORDER BY sep_qty DESC;"},
+  {id:'c3s4',type:'choice',skill:'causal',prompt:'「芋泥鮮奶 10 月一杯都沒賣！一定是這樣，我現在就跟老闆說是芋泥害的。」你怎麼回阿凱？',
+   options:[
+    {t:'「對，芋泥就是兇手，直接報告吧。」',fb:'資料只告訴你「芋泥 10 月沒有銷售」，沒告訴你「為什麼」。可能缺貨、可能 POS 下架、也可能是系統沒記錄到。'},
+    {t:'「應該是 10 月天氣轉涼，大家不想喝飲料了。」',fb:'天氣會影響所有店，但其他店只小幅下滑。只發生在單一店的問題，要找單一店的原因。'},
+    {t:'「建議直接下架芋泥鮮奶，改推其他品項。」',fb:'方向反了。芋泥是台中店的招牌，問題是「沒得賣」，不是「賣不好」。'},
+    {t:'「先別急。芋泥 9 月在台中店賣了 {{taroSep}} 杯，是最暢銷的品項。我建議先跟門市確認是不是缺貨或下架；我這邊再查訂單數有沒有一起掉，看是不是有客人因此流失。」',ok:true,fb:'用資料提出假設、用現場資訊驗證，再主動檢查第二個指標。這就是因果思維。'}
+   ]},
+  {id:'c3s5',type:'sql',skill:'date',prompt:'驗證假設：台中勤美店 9 月和 10 月的訂單數各是多少？',out:'month（格式 YYYY-MM）, orders',
+   hints:['只需要 <code>orders</code> 一張表。',"篩選 <code>store_id = 3</code> 與 9、10 月，再依月份 <code>GROUP BY</code>。"],
+   solution:"SELECT strftime('%Y-%m', order_date) AS month,\n       COUNT(*) AS orders\nFROM orders\nWHERE store_id = 3\n  AND order_date >= '2026-09-01'\nGROUP BY month;"}
+ ],
+ epilogue:'結案紀錄：採購確認芋頭供應商 9/30 起斷貨。台中勤美店 10 月訂單數下滑 {{tcOrderDrop}}，店長說的「客人一樣多」並不成立。公司已建立招牌品項的庫存預警。',
+ resume:'透過多層下鑽分析，找出單一門市營收下滑 {{tcDrop}} 的主因（招牌商品斷貨），並推動建立庫存預警機制。',
+ tip:'相關不等於因果。資料負責提出假設，現場負責確認原因。'},
+
+{id:'c4',no:'M-052',pri:'P2',title:'優惠券的真相',who:{name:'Vivian',role:'行銷經理',i:'V'},
+ intro:'Hi～10 月我們推了 App 限定的 MILK50（鮮奶茶半價），訂單超多！想請你幫我整理成效，我要拿去提案，下個月擴大到全通路。',
+ steps:[
+  {id:'c4s1',type:'sql',skill:'coalesce',prompt:'各優惠碼的訂單數，沒用優惠券的訂單顯示為<code>無</code>。',out:'coupon, orders（依 orders 由多到少）',ordered:true,
+   hints:["<code>COALESCE(coupon_code, '無')</code> 會把 NULL 換成「無」。",'用這個新欄位 <code>GROUP BY</code>。'],
+   solution:"SELECT COALESCE(coupon_code, '無') AS coupon,\n       COUNT(*) AS orders\nFROM orders\nGROUP BY coupon\nORDER BY orders DESC;"},
+  {id:'c4s2',type:'sql',skill:'margin',prompt:'營收高不代表賺錢。算出各優惠碼的營收與毛利率。毛利率 = <code>SUM(qty × (unit_price − cost)) ÷ SUM(qty × unit_price)</code>，四捨五入到小數 3 位，沒用優惠券一樣顯示<code>無</code>。',out:'coupon, revenue, gross_margin_rate（0 到 1 的小數）',
+   hints:['成本 cost 在 <code>products</code>，要再 JOIN 一張表。','除法前乘 <code>1.0</code> 避免整數除法，再用 <code>ROUND(…, 3)</code>。'],
+   solution:"SELECT COALESCE(o.coupon_code, '無') AS coupon,\n       SUM(oi.qty * oi.unit_price) AS revenue,\n       ROUND(SUM(oi.qty * (oi.unit_price - p.cost)) * 1.0\n             / SUM(oi.qty * oi.unit_price), 3) AS gross_margin_rate\nFROM orders o\nJOIN order_items oi ON oi.order_id = o.order_id\nJOIN products p ON p.product_id = oi.product_id\nGROUP BY coupon;"},
+  {id:'c4s3',type:'sql',skill:'subq',prompt:'MILK50 有吸引到新客嗎？在用過 MILK50 的會員裡，有多少比例在 9 月也消費過（代表本來就是老客人）？',out:'一個 0 到 1 的比率，四捨五入到小數 3 位',
+   hints:['先找出用過 MILK50 的不重複會員：<code>SELECT DISTINCT customer_id … WHERE coupon_code = \'MILK50\'</code>。','再用 <code>EXISTS</code>（或 <code>IN</code>）檢查他們 9 月有沒有訂單。','<code>AVG(CASE WHEN … THEN 1.0 ELSE 0 END)</code> 就是比例。'],
+   solution:"SELECT ROUND(AVG(\n  CASE WHEN EXISTS (\n    SELECT 1 FROM orders o2\n    WHERE o2.customer_id = m.customer_id\n      AND o2.order_date BETWEEN '2026-09-01' AND '2026-09-30'\n  ) THEN 1.0 ELSE 0 END), 3) AS returning_share\nFROM (\n  SELECT DISTINCT customer_id\n  FROM orders\n  WHERE coupon_code = 'MILK50' AND customer_id IS NOT NULL\n) m;"},
+  {id:'c4s4',type:'choice',skill:'badnews',prompt:'「所以成效很棒對吧？幫我寫成功案例～」你怎麼回 Vivian？',
+   options:[
+    {t:'照她的意思寫，只放訂單數成長的圖。',fb:'只報喜不報憂。等到全通路擴大、毛利被吃掉時，責任會回到你身上。'},
+    {t:'「這個活動很失敗，一直在虧錢。」',fb:'毛利率仍是正的，說「虧錢」不精確；直接否定也會讓對方防衛，對話很難繼續。'},
+    {t:'不回她，直接把分析寄給執行長。',fb:'越級會破壞信任。先跟需求方溝通，必要時再一起向上報告。'},
+    {t:'「MILK50 確實帶來 {{milkOrders}} 筆訂單，聲量很成功。不過它的毛利率只有 {{marginMilk}}，無優惠訂單是 {{marginNone}}；而且 {{milkReturning}} 的使用者 9 月本來就有消費。建議先不要全通路擴大，改成『限新會員』或『第二杯半價』，挑兩家店做 A/B 測試。」',ok:true,fb:'先肯定、再用數據說明風險、最後給替代方案。壞消息配上解法，對方比較能接受，你也成了幫她把提案做好的人。'}
+   ]}
+ ],
+ resume:'評估促銷活動的毛利與新客獲取成效，發現補貼多流向既有顧客，提出限新客與 A/B 測試的改版建議。',
+ tip:'好的分析師不只回答「有沒有效」，還會問「對誰有效、代價是什麼」。'},
+
+{id:'c5',no:'P-088',pri:'P1',title:'結帳按鈕之謎',who:{name:'Leo',role:'App 產品經理',i:'L'},
+ intro:'App 10 月的訂單轉換好像變差了，但工程那邊說「系統一切正常」。app_events 有每個 session 的行為紀錄，可以幫我看看問題卡在哪一步嗎？',
+ steps:[
+  {id:'c5s1',type:'sql',skill:'distinct',prompt:'10 月 App 漏斗：每個步驟（event_name）有多少個不重複的 session？注意同一個 session 可能重複觸發同一個事件。',out:'event_name, sessions（依 sessions 由多到少）',ordered:true,
+   hints:['用 <code>COUNT(DISTINCT session_id)</code>，不是 <code>COUNT(*)</code>。','依 <code>event_name</code> 分組。'],
+   solution:"SELECT event_name,\n       COUNT(DISTINCT session_id) AS sessions\nFROM app_events\nGROUP BY event_name\nORDER BY sessions DESC;"},
+  {id:'c5s2',type:'sql',skill:'distinct',prompt:'依平台與 App 版本，計算付款成功率 = 有 <code>payment_success</code> 的 session 數 ÷ 有 <code>checkout</code> 的 session 數，四捨五入到小數 3 位。',out:'platform, app_version, success_rate',
+   hints:["<code>COUNT(DISTINCT CASE WHEN event_name = 'checkout' THEN session_id END)</code> 只會數符合條件的 session。",'<code>GROUP BY platform, app_version</code>。','乘 <code>1.0</code>，再 <code>ROUND(…, 3)</code>。'],
+   solution:"SELECT platform, app_version,\n  ROUND(\n    COUNT(DISTINCT CASE WHEN event_name = 'payment_success' THEN session_id END) * 1.0\n    / COUNT(DISTINCT CASE WHEN event_name = 'checkout' THEN session_id END)\n  , 3) AS success_rate\nFROM app_events\nGROUP BY platform, app_version;"},
+  {id:'c5s3',type:'sql',skill:'having',prompt:'估計影響：Android 5.3.0 有多少個 session 走到 checkout，卻沒有付款成功？',out:'一個數字',
+   hints:['先依 <code>session_id</code> 分組。',"<code>HAVING SUM(event_name = 'checkout') > 0 AND SUM(event_name = 'payment_success') = 0</code>",'外面再包一層 <code>SELECT COUNT(*) FROM (…)</code>。'],
+   solution:"SELECT COUNT(*) AS stuck_sessions\nFROM (\n  SELECT session_id\n  FROM app_events\n  WHERE platform = 'Android' AND app_version = '5.3.0'\n  GROUP BY session_id\n  HAVING SUM(event_name = 'checkout') > 0\n     AND SUM(event_name = 'payment_success') = 0\n);"},
+  {id:'c5s4',type:'choice',skill:'collab',prompt:'你要怎麼跟 Leo 和工程團隊報告？',
+   options:[
+    {t:'「Android 5.3.0（10/15 上線）的付款成功率只有 {{andNew}}，同期 iOS 是 {{iosRate}}、Android 舊版是 {{andOld}}。10 月已有 {{stuck}} 個 session 卡在付款。高度懷疑新版付款流程有問題，附上查詢語法和 10 個 session_id 樣本，請工程協助重現。」',ok:true,fb:'具體、可重現、有影響量化。工程師拿到就能開始查，不會變成「數據說有問題、工程說沒問題」的爭論。'},
+    {t:'「轉換率變低了，建議加大優惠吸引大家付款。」',fb:'你已經找到具體的版本差異。用優惠掩蓋 bug 只會浪費錢。'},
+    {t:'「工程說系統正常，那應該是 Android 用戶比較不想付錢。」',fb:'同一群 Android 用戶在舊版的付款成功率很正常。差異跟著版本走，不是跟著人走。'},
+    {t:'「再等一個月，資料多一點再說。」',fb:'每天都有訂單在流失。問題已經很明確時，要及早升級處理。'}
+   ]}
+ ],
+ resume:'建立 App 轉換漏斗，定位 Android 新版本付款成功率降至 {{andNew}} 的問題，提供可重現樣本協助工程修復。',
+ tip:'指標異常時，依平台、版本、時間切開來看，問題常常會自己浮出來。'},
+
+{id:'c6',no:'X-001',pri:'P2',title:'季度董事會簡報',who:{name:'Grace',role:'執行長',i:'G'},
+ intro:'我下週要跟董事會報告營運狀況。聽說你這幾週幫各部門挖出不少問題，這次簡報的數據就交給你了。',
+ steps:[
+  {id:'c6s1',type:'sql',skill:'windowf',prompt:'各城市最暢銷的品項（依杯數，城市用門市所在的 <code>stores.city</code>）。用 <code>RANK()</code> 找出每個城市的第 1 名。',out:'city, product_name, cups',
+   hints:['先算出「城市 × 品項」的總杯數。','<code>RANK() OVER (PARTITION BY city ORDER BY cups DESC)</code>','視窗函數不能直接寫在 WHERE，要先包成子查詢或 CTE（<code>WITH …</code>），再篩 <code>rk = 1</code>。'],
+   solution:"WITH t AS (\n  SELECT s.city, p.name AS product_name, SUM(oi.qty) AS cups\n  FROM order_items oi\n  JOIN orders o ON o.order_id = oi.order_id\n  JOIN stores s ON s.store_id = o.store_id\n  JOIN products p ON p.product_id = oi.product_id\n  GROUP BY s.city, p.product_id\n), r AS (\n  SELECT *, RANK() OVER (PARTITION BY city ORDER BY cups DESC) AS rk\n  FROM t\n)\nSELECT city, product_name, cups\nFROM r\nWHERE rk = 1;"},
+  {id:'c6s2',type:'sql',skill:'windowf',prompt:'各門市每月營收與月增率（MoM）。用 <code>LAG()</code> 取上個月的營收；mom_growth = 本月 ÷ 上月 − 1，四捨五入到小數 3 位，7 月沒有上月，顯示 NULL。',out:'store_name, month, revenue, mom_growth',
+   hints:['先用 CTE 算出每店每月營收。','<code>LAG(revenue) OVER (PARTITION BY store_name ORDER BY month)</code>','<code>ROUND(revenue * 1.0 / LAG(…) OVER (…) - 1, 3)</code>'],
+   solution:"WITH m AS (\n  SELECT s.name AS store_name,\n         strftime('%Y-%m', o.order_date) AS month,\n         SUM(oi.qty * oi.unit_price) AS revenue\n  FROM orders o\n  JOIN order_items oi ON oi.order_id = o.order_id\n  JOIN stores s ON s.store_id = o.store_id\n  GROUP BY s.name, month\n)\nSELECT store_name, month, revenue,\n       ROUND(revenue * 1.0\n         / LAG(revenue) OVER (PARTITION BY store_name ORDER BY month) - 1, 3) AS mom_growth\nFROM m\nORDER BY store_name, month;"},
+  {id:'c6s3',type:'choice',skill:'exec',prompt:'簡報只有 10 分鐘。第一頁你要放什麼？',
+   options:[
+    {t:'把這幾週做的 20 張圖都放上去，展現工作量。',fb:'工作量不是重點，董事會的時間很貴。圖表放附錄，被問到再翻。'},
+    {t:'先花 3 分鐘介紹資料庫架構和 SQL 寫法。',fb:'方法論對分析師很重要，對董事會不重要。除非被問到，否則不用講。'},
+    {t:'一頁三個重點：①新竹巨城店持續成長，10 月月增 {{hcGrowth}}；②台中斷貨讓 10 月營收下滑 {{tcDrop}}，已建立庫存預警；③MILK50 毛利率僅 {{marginMilk}}，建議 Q4 改版測試。每點附一個數字和一個需要董事會決定的事。',ok:true,fb:'高層想知道三件事：發生什麼、影響多大、需要我決定什麼。重點控制在三個以內，每點都有數字和行動。'},
+    {t:'只講好消息，台中和優惠券的問題之後再處理。',fb:'隱藏問題會讓你失去信任。帶著解法講問題，反而展現你掌握狀況。'}
+   ]},
+  {id:'c6s4',type:'choice',skill:'star',prompt:'轉職面試常見題：「請分享一次你用數據影響決策的經驗。」哪個回答最好？',
+   options:[
+    {t:'「我很會寫 SQL，JOIN、視窗函數都會，也會用 Excel 和 Python。」',fb:'列技能不是說故事。面試官想知道你怎麼用技能解決問題。'},
+    {t:'「我做過很多分析，大家都覺得很有幫助。」',fb:'太模糊，沒有具體事件、數字，也聽不出你的角色。'},
+    {t:'「情境：台中門市 10 月營收異常下滑，店長認為客流正常。任務：找出原因。行動：我依門市與月份拆解營收，下鑽到品項，發現招牌商品零銷售，再用訂單數驗證客流其實下降 {{tcOrderDrop}}，並與採購確認是缺貨。結果：公司建立庫存預警機制。」',ok:true,fb:'STAR（情境、任務、行動、結果）結構清楚，有數字、有驗證、有商業影響。把這個遊戲裡的案例改寫成你自己的作品集專案，也很適合拿去面試。'},
+    {t:'「我們團隊做過一個專案，後來營收有成長。」',fb:'只講「我們」，面試官聽不出你做了什麼。要講你自己的行動。'}
+   ]}
+ ],
+ resume:'運用視窗函數（RANK、LAG）完成區域暢銷品與月增率分析，撰寫董事會營運摘要。',
+ tip:'把這 6 個案例整理成作品集：問題、方法、SQL、結論、影響。面試時你就有 6 個故事可以講。'}
+];
+const ALLSTEPS=CHAPTERS.flatMap(c=>c.steps);
+const LEVELS=[[0,'實習分析師'],[250,'初級分析師'],[700,'數據分析師'],[1200,'資深分析師'],[1750,'分析主管']];
+
+/* ---------- schema docs ---------- */
+const SCHEMA=[
+ ['stores','門市',[['store_id','門市編號'],['name','門市名稱'],['city','城市'],['open_date','開幕日']]],
+ ['products','品項',[['product_id','品項編號'],['name','品名'],['category','類別'],['price','售價'],['cost','成本']]],
+ ['customers','會員',[['customer_id','會員編號'],['name','姓名'],['city','居住城市'],['signup_date','註冊日'],['member_tier','一般 / 銀卡 / 金卡']]],
+ ['orders','訂單',[['order_id','訂單編號'],['customer_id','會員（散客為 NULL）'],['store_id','門市'],['order_date','YYYY-MM-DD'],['channel','門市 / 外送 / App自取'],['coupon_code','優惠碼（可為 NULL）']]],
+ ['order_items','訂單明細',[['order_id','訂單編號'],['product_id','品項'],['qty','杯數'],['unit_price','實收單價（已折扣）']]],
+ ['coupons','優惠活動',[['coupon_code','優惠碼'],['campaign','活動名稱'],['discount','折扣內容'],['start_date','開始'],['end_date','結束']]],
+ ['app_events','App 行為',[['event_id','事件編號'],['session_id','工作階段'],['user_id','會員'],['platform','iOS / Android'],['app_version','App 版本'],['event_name','事件名稱'],['event_date','日期']]]
+];
+
+/* ---------- data generator ---------- */
+function buildDB(SQL){
+  const db=new SQL.Database();
+  db.exec(`CREATE TABLE stores(store_id INTEGER PRIMARY KEY,name TEXT,city TEXT,open_date TEXT);
+CREATE TABLE products(product_id INTEGER PRIMARY KEY,name TEXT,category TEXT,price INTEGER,cost INTEGER);
+CREATE TABLE customers(customer_id INTEGER PRIMARY KEY,name TEXT,city TEXT,signup_date TEXT,member_tier TEXT);
+CREATE TABLE coupons(coupon_code TEXT PRIMARY KEY,campaign TEXT,discount TEXT,start_date TEXT,end_date TEXT);
+CREATE TABLE orders(order_id INTEGER PRIMARY KEY,customer_id INTEGER,store_id INTEGER,order_date TEXT,channel TEXT,coupon_code TEXT);
+CREATE TABLE order_items(order_id INTEGER,product_id INTEGER,qty INTEGER,unit_price INTEGER);
+CREATE TABLE app_events(event_id INTEGER PRIMARY KEY,session_id INTEGER,user_id INTEGER,platform TEXT,app_version TEXT,event_name TEXT,event_date TEXT);`);
+  const R=mulberry32(20261109);
+  const pick=a=>a[Math.floor(R()*a.length)];
+  const wpick=(items,w)=>{let s=0;for(const x of w)s+=x;let r=R()*s;for(let i=0;i<items.length;i++){r-=w[i];if(r<0)return items[i]}return items[items.length-1]};
+  const day=864e5, ds=t=>new Date(t).toISOString().slice(0,10);
+  db.exec('BEGIN');
+  const STORES=[[1,'台北信義店','台北','2023-03-01',16],[2,'台北中山店','台北','2024-06-15',12],[3,'台中勤美店','台中','2023-09-10',13],[4,'高雄駁二店','高雄','2025-01-20',9],[5,'新竹巨城店','新竹','2025-08-01',8]];
+  let st=db.prepare('INSERT INTO stores VALUES (?,?,?,?)'); STORES.forEach(s=>st.run(s.slice(0,4))); st.free();
+  const PROD=[[1,'經典紅茶','純茶',35,8],[2,'茉莉綠茶','純茶',35,8],[3,'烏龍青茶','純茶',40,10],[4,'珍珠鮮奶茶','鮮奶茶',65,22],[5,'芋泥鮮奶','鮮奶茶',75,28],[6,'黑糖鮮奶','鮮奶茶',70,24],[7,'抹茶拿鐵','鮮奶茶',80,30],[8,'百香綠茶','果茶',55,18],[9,'芒果冰沙','果茶',85,32],[10,'檸檬多多','果茶',60,20],[11,'冬瓜檸檬','果茶',50,15],[12,'珍珠加料','加料',10,3]];
+  st=db.prepare('INSERT INTO products VALUES (?,?,?,?,?)'); PROD.forEach(p=>st.run(p)); st.free();
+  st=db.prepare('INSERT INTO coupons VALUES (?,?,?,?,?)');
+  [['SUMMER20','夏日全品項 8 折','全品項 8 折','2026-07-01','2026-08-31'],['NEW10','會員 9 折','全品項 9 折','2026-01-01','2026-12-31'],['MILK50','App 鮮奶茶半價','鮮奶茶 5 折（限 App 自取）','2026-10-01','2026-10-31']].forEach(c=>st.run(c)); st.free();
+  // customers
+  const SUR='陳林黃張李王吳劉蔡楊許鄭謝郭洪曾邱廖賴周'.split('');
+  const GIV=['怡君','雅婷','家豪','志明','淑芬','宗翰','冠宇','欣怡','承恩','品妍','柏翰','詩涵','俊傑','佳穎','宥廷','子晴','建宏','美玲','偉倫','思妤'];
+  const CITIES=['台北','台中','高雄','新竹','桃園'];
+  const byCity={}, all=[];
+  st=db.prepare('INSERT INTO customers VALUES (?,?,?,?,?)');
+  for(let i=1;i<=600;i++){
+    const city=wpick(CITIES,[40,20,15,13,12]);
+    st.run([i,pick(SUR)+pick(GIV),city,ds(Date.UTC(2025,0,1)+Math.floor(R()*546)*day),wpick(['一般','銀卡','金卡'],[70,22,8])]);
+    (byCity[city]=byCity[city]||[]).push(i); all.push(i);
+  }
+  st.free();
+  // orders
+  const MF={7:1.08,8:1.12,9:1.0,10:0.95}, MF5={7:0.72,8:0.85,9:1.0,10:1.12};
+  const BASEW=[8,7,6,12,6,8,5,7,5,6,6,4];
+  const weights=(sid,m)=>{const w=BASEW.slice();
+    if(sid===3)w[4]=20; if(sid===3&&m===10)w[4]=0;
+    if(sid===4)w[10]=16; if(sid===5)w[5]=16;
+    if(m===7||m===8)w[8]*=2; if(m===10)w[8]*=0.5; return w};
+  const PIDS=PROD.map(p=>p[0]), MILK=[4,5,6,7];
+  const so=db.prepare('INSERT INTO orders VALUES (?,?,?,?,?,?)'), si=db.prepare('INSERT INTO order_items VALUES (?,?,?,?)');
+  let oid=1; const D0=Date.UTC(2026,6,1);
+  for(let d=0;d<123;d++){
+    const t=D0+d*day, date=ds(t), dt=new Date(t), m=dt.getUTCMonth()+1, wd=dt.getUTCDay();
+    const wkf=(wd===0||wd===6)?1.3:1;
+    for(const s of STORES){
+      const sid=s[0]; let f=(sid===5?MF5:MF)[m]; if(sid===3&&m===10)f*=0.62;
+      const n=Math.round(s[4]*f*wkf*(0.8+R()*0.4)); const w=weights(sid,m);
+      for(let k=0;k<n;k++){
+        const channel=wpick(['門市','外送','App自取'],[55,25,20]);
+        let cust=null;
+        if(channel==='App自取'||R()<0.62){const pool=(R()<0.85&&byCity[s[2]])?byCity[s[2]]:all;cust=pick(pool)}
+        let coupon=null;
+        if(channel==='App自取'&&m===10&&R()<0.6)coupon='MILK50';
+        else if(m<=8&&R()<0.18)coupon='SUMMER20';
+        else if(cust&&R()<0.05)coupon='NEW10';
+        const nItems=wpick([1,2,3,4],channel==='外送'?[22,40,24,14]:[52,30,13,5]);
+        const lines=new Map();
+        for(let i=0;i<nItems;i++){
+          const p=(i===0&&coupon==='MILK50')?wpick(MILK,MILK.map(id=>w[id-1])):wpick(PIDS,w);
+          lines.set(p,(lines.get(p)||0)+wpick([1,2],[82,18]));
+        }
+        so.run([oid,cust,sid,date,channel,coupon]);
+        for(const [p,q] of lines){
+          const pr=PROD[p-1]; let disc=1;
+          if(coupon==='SUMMER20')disc=0.8; else if(coupon==='NEW10')disc=0.9; else if(coupon==='MILK50'&&pr[2]==='鮮奶茶')disc=0.5;
+          si.run([oid,p,q,Math.round(pr[3]*disc)]);
+        }
+        oid++;
+      }
+    }
+  }
+  so.free(); si.free();
+  // app funnel, October
+  const se=db.prepare('INSERT INTO app_events VALUES (?,?,?,?,?,?,?)');
+  const STEPS=['open_app','view_menu','add_to_cart','checkout','payment_success'];
+  let eid=1;
+  for(let sid=1;sid<=3000;sid++){
+    const plat=R()<0.5?'iOS':'Android', dd=1+Math.floor(R()*31), date='2026-10-'+String(dd).padStart(2,'0');
+    const ver=(plat==='Android'&&dd>=15)?'5.3.0':'5.2.0', uid=1+Math.floor(R()*600);
+    const p=[1,0.82,0.46,0.72,plat==='iOS'?0.93:(ver==='5.3.0'?0.56:0.91)];
+    for(let i=0;i<5;i++){
+      if(R()>=p[i])break;
+      se.run([eid++,sid,uid,plat,ver,STEPS[i],date]);
+      if((i===1&&R()<0.3)||(i===2&&R()<0.25)) se.run([eid++,sid,uid,plat,ver,STEPS[i],date]);
+    }
+  }
+  se.free();
+  db.exec('COMMIT');
+  return db;
+}
+
+/* ---------- state ---------- */
+const KEY='analyst-quest-v1';
+const blank=()=>({epoch:0,solved:{},hints:{},sol:{},wrong:{},drafts:{},picked:{},view:{ch:0,step:0}});
+let S=(()=>{try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.solved)return Object.assign(blank(),s)}catch(e){}return blank()})();
+const saveLocal=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+function save(){saveLocal();queueCloud()}
+
+/* ---------- cloud sync (per-person, private) ---------- */
+const SYNC=['epoch','solved','hints','sol','wrong','picked','drafts'];
+let cloudRef=null, writing=false, again=false, wTimer=null, lastRemote='';
+function syncBody(s){const o={};SYNC.forEach(k=>o[k]=k==='epoch'?(s.epoch||0):(s[k]||{}));return o}
+function canon(x){if(Array.isArray(x))return '['+x.map(canon).join(',')+']';if(x&&typeof x==='object')return '{'+Object.keys(x).sort().map(k=>JSON.stringify(k)+':'+canon(x[k])).join(',')+'}';return JSON.stringify(x)}
+function setSync(t,s){const e=$('#sync');if(e){e.textContent=t;e.dataset.s=s||''}}
+function mergeState(a,b){
+  const ea=a.epoch||0, eb=b.epoch||0;
+  if(eb>ea)return Object.assign(blank(),JSON.parse(JSON.stringify(syncBody(b))),{view:a.view});
+  if(eb<ea)return a;
+  const o=blank(); o.epoch=ea; o.view=a.view;
+  for(const k of ['solved','hints','wrong']){o[k]={...a[k]};for(const [id,v] of Object.entries(b[k]||{}))o[k][id]=Math.max(o[k][id]||0,v)}
+  o.sol={...(b.sol||{}),...a.sol};
+  o.picked={...a.picked};for(const [id,v] of Object.entries(b.picked||{}))o.picked[id]=[...new Set([...(o.picked[id]||[]),...v])];
+  o.drafts={...(b.drafts||{}),...a.drafts};
+  return o;
+}
+function queueCloud(){if(!cloudRef)return;clearTimeout(wTimer);wTimer=setTimeout(flushCloud,1200)}
+async function flushCloud(){
+  if(!cloudRef)return; if(writing){again=true;return}
+  const body=syncBody(S), c=canon(body); if(c===lastRemote){setSync('已同步到雲端','ok');return}
+  writing=true; setSync('同步中…');
+  try{await cloudRef.set(body);lastRemote=c;setSync('已同步到雲端','ok')}
+  catch(e){setSync(e&&e.code==='quota_exceeded'?'雲端空間已滿，進度先存在這台裝置':'同步失敗，進度先存在這台裝置','bad');if(e&&(e.code==='invalid_argument'||e.code==='revoked'))cloudRef=null}
+  writing=false; if(again){again=false;flushCloud()}
+}
+function refreshAfterSync(){renderHeader();renderQueue();if(!(document.activeElement&&document.activeElement.id==='sql-editor'))renderMain()}
+async function initCloud(){
+  if(!(window.claude&&typeof window.claude.use==='function'))return;
+  setSync('連線雲端中…');
+  let cdb=null,user=null;
+  try{[cdb,user]=await Promise.all([window.claude.use('db'),window.claude.use('user')])}catch(e){}
+  const uid=user?await user.id():null;
+  if(!cdb||!uid){setSync('進度存在這台裝置');return}
+  const ref=cdb.doc('data/users/'+uid+'/progress');
+  const timer=setTimeout(()=>{if(!cloudRef)setSync('雲端暫時連不上，進度先存在這台裝置','bad')},10000);
+  ref.onSnapshot(snap=>{
+    if(snap.metadata.hasPendingWrites)return;
+    if(!snap.metadata.fromCache)clearTimeout(timer);
+    cloudRef=ref;
+    const remote=snap.exists?snap.data():null;
+    const rc=remote?canon(syncBody(remote)):'';
+    lastRemote=rc;
+    const before=canon(syncBody(S));
+    if(remote)S=mergeState(S,remote);
+    const after=canon(syncBody(S));
+    saveLocal();
+    if(after!==before)refreshAfterSync();
+    if(after!==rc)queueCloud(); else setSync('已同步到雲端','ok');
+  },()=>{clearTimeout(timer);cloudRef=null;setSync('同步中斷，進度先存在這台裝置','bad')});
+}
+
+let SQLlib=null, db=null, EXP={}, V={};
+const fill=s=>String(s).replace(/\{\{(\w+)\}\}/g,(_,k)=>V[k]!=null?V[k]:'…');
+
+function totalXP(){return Object.values(S.solved).reduce((a,b)=>a+b,0)}
+function levelOf(xp){let i=0;LEVELS.forEach((l,j)=>{if(xp>=l[0])i=j});return i}
+function sqlXP(st){if(S.sol[st.id])return 20;return Math.max(40,100-25*(S.hints[st.id]||0))}
+function choiceXP(st){const w=S.wrong[st.id]||0;return w===0?50:w===1?25:10}
+const solved=id=>id in S.solved;
+const chDone=c=>c.steps.every(s=>solved(s.id));
+const chOpen=i=>i===0||chDone(CHAPTERS[i-1]);
+const stepOpen=(c,j)=>j===0||solved(c.steps[j-1].id);
+
+/* ---------- SQL ---------- */
+function runSQL(sql){
+  try{const r=db.exec(sql);return {res:r.length?r[r.length-1]:null}}
+  catch(e){return {err:e.message}}
+}
+function explainErr(m){
+  let x;
+  if((x=m.match(/no such column: (\S+)/)))return `找不到欄位「${esc(x[1])}」。檢查拼字，或確認這個欄位在你 FROM / JOIN 的資料表裡。`;
+  if((x=m.match(/no such table: (\S+)/)))return `找不到資料表「${esc(x[1])}」。可用的資料表都列在資料表清單裡。`;
+  if((x=m.match(/ambiguous column name: (\S+)/)))return `欄位「${esc(x[1])}」有歧義：好幾張表都有這個欄位，請加上表名或別名，例如 <code>o.${esc(x[1])}</code>。`;
+  if(/misuse of window function/.test(m))return '視窗函數不能直接寫在 WHERE 或 GROUP BY，請先包進子查詢或 CTE。';
+  if(/misuse of aggregate/.test(m))return '聚合函數（SUM、COUNT…）不能放在 WHERE，分組後的篩選請用 HAVING。';
+  if((x=m.match(/near "(.+?)": syntax error/)))return `語法錯誤，問題在「${esc(x[1])}」附近。檢查逗號、括號或關鍵字順序。`;
+  if(/incomplete input/.test(m))return '查詢好像沒寫完，檢查括號或引號有沒有成對。';
+  return 'SQLite 回報了一個錯誤。';
+}
+function eq(a,b){
+  if(a===null||b===null)return a===b;
+  if(typeof b==='number'){const x=typeof a==='number'?a:parseFloat(a);if(!isFinite(x))return false;return Math.abs(x-b)<=Math.max(0.006,Math.abs(b)*0.004)}
+  return String(a).trim()===String(b).trim();
+}
+const rowKey=r=>r.map(x=>x===null?'~':typeof x==='number'?x.toFixed(2):String(x).trim()).join('\u0001');
+const sortRows=v=>[...v].sort((a,b)=>{const x=rowKey(a),y=rowKey(b);return x<y?-1:x>y?1:0});
+function diff(U,E){for(let i=0;i<E.length;i++)for(let j=0;j<E[i].length;j++)if(!eq(U[i][j],E[i][j]))return [i,j];return null}
+function check(u,e,ordered){
+  if(!u)return '最後一句查詢沒有回傳資料。要用 SELECT 結尾。';
+  if(u.columns.length!==e.columns.length)return `欄位數不符：任務需要 ${e.columns.length} 欄，你的結果有 ${u.columns.length} 欄。`;
+  if(u.values.length!==e.values.length)return `列數不符：預期 ${e.values.length} 列，你的結果有 ${u.values.length} 列。檢查篩選條件或 GROUP BY。`;
+  const d0=diff(sortRows(u.values),sortRows(e.values));
+  if(!d0){ if(ordered&&diff(u.values,e.values))return '數值都對了，但排序不符合任務要求。'; return null; }
+  const U=ordered?u.values:sortRows(u.values),E=ordered?e.values:sortRows(e.values);
+  const [i,j]=diff(U,E)||d0, a=U[i][j], b=E[i][j];
+  let extra='';
+  if(typeof a==='number'&&typeof b==='number'){
+    if(b!==0&&Math.abs(a/b-100)<0.6)extra='比率請用 0 到 1 之間的小數，不用乘 100。';
+    else if(Number.isInteger(a)&&!Number.isInteger(b)&&Math.abs(b)<5)extra='看起來像整數除法把小數捨去了，試試在除法前乘上 1.0。';
+  }
+  return `第 ${i+1} 列第 ${j+1} 欄的值不符合。${extra}${ordered?'':'（比對時不看列的順序）'}`;
+}
+function tableHTML(res,limit=200){
+  if(!res)return '<p class="meta">查詢已執行，沒有回傳資料列。</p>';
+  const rows=res.values.slice(0,limit);
+  return `<div class="tbl-wrap"><table><thead><tr>${res.columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(v=>v===null?'<td><span class="nul">NULL</span></td>':`<td class="${typeof v==='number'?'num':''}">${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="meta">共 ${res.values.length} 列${res.values.length>limit?`，只顯示前 ${limit} 列`:''}</p>`;
+}
+
+/* ---------- vars from data ---------- */
+function computeVars(){
+  const v=q=>{const r=db.exec(q);return r.length?r[0].values[0][0]:null};
+  const J="FROM orders o JOIN order_items oi ON oi.order_id=o.order_id";
+  V.orderCount=v('SELECT COUNT(*) FROM orders').toLocaleString('en-US');
+  V.nullShare=pct0(v('SELECT AVG(customer_id IS NULL) FROM orders'));
+  const rs=db.exec(`SELECT s.name,SUM(oi.qty*oi.unit_price) r ${J} JOIN stores s ON s.store_id=o.store_id GROUP BY s.store_id ORDER BY r DESC`)[0].values;
+  const tot=rs.reduce((a,b)=>a+b[1],0); V.topStore=rs[0][0]; V.topShare=pct0(rs[0][1]/tot);
+  const aov=c=>v(`SELECT SUM(oi.qty*oi.unit_price)*1.0/COUNT(DISTINCT o.order_id) ${J} WHERE o.channel='${c}'`);
+  V.deliveryAov=nt(aov('外送')); V.storeAov=nt(aov('門市'));
+  const srev=(id,m)=>v(`SELECT SUM(oi.qty*oi.unit_price) ${J} WHERE o.store_id=${id} AND substr(o.order_date,1,7)='2026-${m}'`);
+  const tS=srev(3,'09'),tO=srev(3,'10'); V.tcSep=nt(tS); V.tcOct=nt(tO); V.tcDrop=pct0(1-tO/tS);
+  const hG=srev(5,'10')/srev(5,'09')-1; V.hcGrowth=(hG>=0?'+':'')+pct0(hG);
+  V.taroSep=v(`SELECT SUM(oi.qty) ${J} WHERE o.store_id=3 AND oi.product_id=5 AND substr(o.order_date,1,7)='2026-09'`);
+  const oc=m=>v(`SELECT COUNT(*) FROM orders WHERE store_id=3 AND substr(order_date,1,7)='2026-${m}'`);
+  V.tcOrderDrop=pct0(1-oc('10')/oc('09'));
+  const mg=c=>v(`SELECT SUM(oi.qty*(oi.unit_price-p.cost))*1.0/SUM(oi.qty*oi.unit_price) ${J} JOIN products p ON p.product_id=oi.product_id WHERE ${c}`);
+  V.marginMilk=pct1(mg("o.coupon_code='MILK50'")); V.marginNone=pct1(mg('o.coupon_code IS NULL'));
+  V.milkOrders=v("SELECT COUNT(*) FROM orders WHERE coupon_code='MILK50'").toLocaleString('en-US');
+  V.milkReturning=pct0(EXP.c4s3.values[0][0]);
+  const rate=(p,ver)=>{const r=EXP.c5s2.values.find(x=>x[0]===p&&x[1]===ver);return r?pct1(r[2]):'…'};
+  V.andNew=rate('Android','5.3.0'); V.andOld=rate('Android','5.2.0'); V.iosRate=rate('iOS','5.2.0');
+  V.stuck=EXP.c5s3.values[0][0].toLocaleString('en-US');
+}
+
+/* ---------- rendering ---------- */
+function renderHeader(){
+  const xp=totalXP(), li=levelOf(xp), cur=LEVELS[li], nxt=LEVELS[li+1];
+  $('#lvl').textContent=cur[1];
+  $('#xpfill').style.width=(nxt?Math.min(100,(xp-cur[0])/(nxt[0]-cur[0])*100):100)+'%';
+  $('#xptext').textContent=nxt?`${xp} XP · 距離「${nxt[1]}」還差 ${nxt[0]-xp}`:`${xp} XP · 已達最高職級`;
+}
+function renderQueue(){
+  const v=S.view;
+  let h='<h3>工單佇列</h3>';
+  CHAPTERS.forEach((c,i)=>{
+    const n=c.steps.filter(s=>solved(s.id)).length, open=chOpen(i);
+    h+=`<button class="qitem ${v.ch===i&&!v.mode?'on':''}" data-ch="${i}" ${open?'':'disabled'} type="button">
+      <span class="qno">${c.no}</span><span class="qt">${c.title}</span>
+      <span class="qp">${open?`<span class="dots">${c.steps.map(s=>`<b class="${solved(s.id)?'y':''}"></b>`).join('')}</span>${n===c.steps.length?'已結案':`${n}/${c.steps.length}`}`:'完成上一張工單後開放'}</span></button>`;
+  });
+  h+=`<div class="qsep"></div>
+  <button class="qitem ${v.mode==='sandbox'?'on':''}" data-mode="sandbox" type="button"><span class="qno">SQL</span><span class="qt">自由練習</span><span class="qp">隨意查詢，不計分</span></button>
+  <button class="qitem ${v.mode==='skills'?'on':''}" data-mode="skills" type="button"><span class="qno">CV</span><span class="qt">技能樹與履歷</span><span class="qp">${Object.keys(S.solved).length}/${ALLSTEPS.length} 項任務完成</span></button>`;
+  $('#queue').innerHTML=h;
+  $('#queue').querySelectorAll('[data-ch]').forEach(b=>b.onclick=()=>{const i=+b.dataset.ch,c=CHAPTERS[i];let j=c.steps.findIndex(s=>!solved(s.id));if(j<0)j=c.steps.length;go({ch:i,step:j})});
+  $('#queue').querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>go({mode:b.dataset.mode,ch:S.view.ch,step:S.view.step}));
+}
+function go(view){S.view=view;save();renderQueue();renderMain();window.scrollTo({top:0,behavior:'smooth'})}
+
+function ticketHTML(c,ci,cur){
+  return `<article class="ticket">
+    <div class="thead"><span class="tno">工單 ${c.no}</span><span class="pri ${c.pri.toLowerCase()}">${c.pri}</span><span>來自 ${c.who.name}（${c.who.role}）</span></div>
+    <h2>${c.title}</h2>
+    <div class="msg"><div class="avatar" aria-hidden="true">${c.who.i}</div><div class="bubble"><small>${c.who.name}</small>${fill(c.intro)}</div></div>
+    <ol class="steps">${c.steps.map((s,j)=>`<li><button type="button" data-step="${j}" class="${j===cur?'on':''} ${solved(s.id)?'y':''}" ${stepOpen(c,j)?'':'disabled'}>${j+1}. ${s.type==='sql'?'SQL':'判斷'}</button></li>`).join('')}
+      ${chDone(c)?`<li><button type="button" data-step="${c.steps.length}" class="${cur===c.steps.length?'on':''}">結案報告</button></li>`:''}</ol>
+  </article>`;
+}
+
+function renderMain(){
+  const v=S.view, m=$('#main');
+  if(v.mode==='skills'){m.innerHTML=skillsHTML();return}
+  if(v.mode==='sandbox'){renderSandbox();return}
+  let ci=v.ch||0; if(!chOpen(ci))ci=0;
+  const c=CHAPTERS[ci]; let j=Math.min(v.step||0,c.steps.length);
+  if(j===c.steps.length&&!chDone(c))j=c.steps.findIndex(s=>!solved(s.id));
+  if(j<c.steps.length&&!stepOpen(c,j))j=c.steps.findIndex(s=>!solved(s.id));
+  S.view={ch:ci,step:j};
+  let body;
+  if(j===c.steps.length)body=closedHTML(c,ci);
+  else body=c.steps[j].type==='sql'?sqlHTML(c,c.steps[j]):choiceHTML(c,c.steps[j]);
+  m.innerHTML=ticketHTML(c,ci,j)+body;
+  m.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>go({ch:ci,step:+b.dataset.step}));
+  if(j===c.steps.length){const nb=m.querySelector('#next-ch');if(nb)nb.onclick=()=>go(ci+1<CHAPTERS.length?{ch:ci+1,step:0}:{mode:'skills'});return}
+  const st=c.steps[j];
+  if(st.type==='sql')wireSQL(c,ci,j,st); else wireChoice(c,ci,j,st);
+}
+
+function nextBtn(){return `<button class="btn primary" id="next" type="button">下一步</button>`}
+function goNext(ci,j){go({ch:ci,step:j+1})}
+
+function sqlHTML(c,st){
+  const done=solved(st.id), used=S.hints[st.id]||0;
+  return `<section class="task">
+    <div class="task-head"><span class="kind">SQL 任務</span><span class="chip">${SKILLS[st.skill].n}</span><span class="xpchip">${done?`已獲得 ${S.solved[st.id]} XP`:`+${sqlXP(st)} XP`}</span></div>
+    <p class="prompt">${st.prompt}</p>
+    <div class="out"><span>輸出</span><code>${st.out}</code></div>
+    <label class="sr" for="sql-editor">SQL 編輯器</label>
+    <textarea id="sql-editor" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="-- 在這裡寫 SQL，Ctrl + Enter 執行&#10;SELECT * FROM products LIMIT 5;">${esc(S.drafts[st.id]||'')}</textarea>
+    <div class="actions">
+      <button class="btn primary" id="run" type="button" ${db?'':'disabled'}>${db?'執行查詢':'資料庫建立中…'}</button><span class="kbd">Ctrl / ⌘ + Enter</span>
+      <span class="spacer"></span>
+      ${done?'':`<button class="btn" id="hint" type="button" ${used>=st.hints.length||S.sol[st.id]?'disabled':''}>提示 ${used}/${st.hints.length}（−25 XP）</button>
+      <button class="btn" id="sol" type="button">看解答</button>`}
+    </div>
+    <div class="hints">${st.hints.slice(0,used).map(h=>`<div class="hint">${h}</div>`).join('')}</div>
+    <div id="fb">${done?doneFB(st):S.sol[st.id]?`<div class="fb info">參考解答（本題改為 20 XP，自己打一次或貼上執行就能過關）：<pre class="sol">${esc(st.solution)}</pre></div>`:''}</div>
+    <div id="result"></div>
+  </section>`;
+}
+function doneFB(st){return `<div class="fb ok"><strong>過關！</strong>結果符合需求。可以對照一下參考寫法，同一個答案通常有好幾種寫法：<pre class="sol">${esc(st.solution)}</pre><div class="actions" style="margin-top:10px">${nextBtn()}</div></div>`}
+
+function wireSQL(c,ci,j,st){
+  const ed=$('#sql-editor'), fb=$('#fb'), out=$('#result');
+  ed.oninput=()=>{S.drafts[st.id]=ed.value;save()};
+  ed.onkeydown=e=>{
+    if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();run()}
+    else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ed.selectionStart;ed.setRangeText('  ',s,ed.selectionEnd,'end');ed.oninput()}
+  };
+  const run=()=>{
+    if(!db)return; const q=ed.value.trim(); if(!q){out.innerHTML='<p class="meta">先寫一段 SQL 再執行。</p>';return}
+    const r=runSQL(q);
+    if(r.err){out.innerHTML=`<div class="fb bad">${explainErr(r.err)}<span class="raw">${esc(r.err)}</span></div>`;return}
+    out.innerHTML=tableHTML(r.res);
+    if(solved(st.id))return;
+    const msg=check(r.res,EXP[st.id],!!st.ordered);
+    if(msg===null){
+      const before=levelOf(totalXP()); S.solved[st.id]=sqlXP(st); save();
+      const after=levelOf(totalXP());
+      toast(after>before?`升職！你現在是「${LEVELS[after][1]}」`:`+${S.solved[st.id]} XP`);
+      renderHeader(); renderQueue();
+      const res=r.res; renderMain(); $('#result').innerHTML=tableHTML(res);
+    } else fb.innerHTML=`<div class="fb info">還差一點：${msg}</div>`;
+  };
+  $('#run').onclick=run;
+  const nx=$('#next'); if(nx)nx.onclick=()=>goNext(ci,j);
+  const hb=$('#hint'); if(hb)hb.onclick=()=>{S.hints[st.id]=(S.hints[st.id]||0)+1;save();renderMain()};
+  const sb=$('#sol'); if(sb){let armed=false;sb.onclick=()=>{
+    if(!armed){armed=true;sb.textContent='再按一次：看解答本題只拿 20 XP';sb.classList.add('warn');setTimeout(()=>{if(sb.isConnected){armed=false;sb.textContent='看解答';}},4000);return}
+    S.sol[st.id]=true;save();renderMain()}}
+}
+
+function choiceHTML(c,st){
+  const picked=S.picked[st.id]||[], done=solved(st.id);
+  return `<section class="task">
+    <div class="task-head"><span class="kind">情境判斷</span><span class="chip soft">${SKILLS[st.skill].n}</span><span class="xpchip">${done?`已獲得 ${S.solved[st.id]} XP`:`+${choiceXP(st)} XP`}</span></div>
+    <div class="msg"><div class="avatar" aria-hidden="true">${c.who.i}</div><div class="bubble"><small>${c.who.name}</small>${fill(st.prompt)}</div></div>
+    <div class="options">${st.options.map((o,k)=>{const p=picked.includes(k);const cls=p?(o.ok?'right':'wrong'):'';
+      return `<button class="opt ${cls}" data-k="${k}" type="button" ${done||p?'disabled':''}>${p?`<span class="tag">${o.ok?'最佳做法':'再想想'}</span>`:''}<span>${fill(o.t)}</span>${p?`<span class="ofb">${fill(o.fb)}</span>`:''}</button>`}).join('')}</div>
+    ${done?`<div class="actions">${nextBtn()}</div>`:''}
+  </section>`;
+}
+function wireChoice(c,ci,j,st){
+  $('#main').querySelectorAll('.opt').forEach(b=>b.onclick=()=>{
+    const k=+b.dataset.k, o=st.options[k];
+    S.picked[st.id]=[...(S.picked[st.id]||[]),k];
+    if(o.ok){const before=levelOf(totalXP());S.solved[st.id]=choiceXP(st);const after=levelOf(totalXP());toast(after>before?`升職！你現在是「${LEVELS[after][1]}」`:`+${S.solved[st.id]} XP`);renderHeader();renderQueue()}
+    else S.wrong[st.id]=(S.wrong[st.id]||0)+1;
+    save(); renderMain();
+  });
+  const nx=$('#next'); if(nx)nx.onclick=()=>goNext(ci,j);
+}
+
+function closedHTML(c,ci){
+  const xp=c.steps.reduce((a,s)=>a+(S.solved[s.id]||0),0), skills=[...new Set(c.steps.map(s=>s.skill))];
+  return `<section class="task closed">
+    <span class="stamp">已結案 · ${xp} XP</span>
+    ${c.epilogue?`<p class="prompt">${fill(c.epilogue)}</p>`:''}
+    <div class="skillgrid">${skills.map(k=>`<div class="sk y ${SKILLS[k].t==='s'?'s':''}"><b>${SKILLS[k].n}</b><span>${SKILLS[k].t==='s'?'軟實力':'硬實力'}</span></div>`).join('')}</div>
+    <div class="resume"><b>履歷可以這樣寫</b>${fill(c.resume)}</div>
+    <div class="resume"><b>職涯小提醒</b>${c.tip}</div>
+    <div class="actions"><button class="btn primary" id="next-ch" type="button">${ci+1<CHAPTERS.length?`前往下一張工單：${CHAPTERS[ci+1].title}`:'查看技能樹與履歷'}</button></div>
+  </section>`;
+}
+
+function skillsHTML(){
+  const got=new Set(ALLSTEPS.filter(s=>solved(s.id)).map(s=>s.skill));
+  const from=k=>CHAPTERS.find(c=>c.steps.some(s=>s.skill===k));
+  const grid=t=>Object.entries(SKILLS).filter(([,s])=>s.t===t).map(([k,s])=>`<div class="sk ${got.has(k)?'y':''} ${t==='s'?'s':''}"><b>${s.n}</b><span>${got.has(k)?'已解鎖':'未解鎖'} · ${from(k).no} ${from(k).title}</span></div>`).join('');
+  const done=CHAPTERS.filter(chDone);
+  return `<section class="task">
+    <h2>技能樹</h2>
+    <p class="lead">數據分析師的工作一半是查資料，一半是把結果講清楚、讓別人採取行動。兩邊都練到，才是面試官想找的人。</p>
+    <div class="task-head"><span class="kind">硬實力 · SQL</span></div><div class="skillgrid">${grid('h')}</div>
+    <div class="task-head"><span class="kind" style="color:var(--amber)">軟實力 · 溝通與商業思維</span></div><div class="skillgrid">${grid('s')}</div>
+  </section>
+  <section class="task">
+    <h2>你的履歷素材</h2>
+    ${done.length?done.map(c=>`<div class="resume"><b>${c.no} ${c.title}</b>${fill(c.resume)}</div>`).join(''):'<p class="lead">每結案一張工單，這裡就會多一條可以寫進履歷或作品集的成果描述。先從「報到日：認識資料庫」開始吧。</p>'}
+  </section>`;
+}
+
+function renderSandbox(){
+  const m=$('#main');
+  m.innerHTML=`<section class="task">
+    <div class="task-head"><span class="kind">自由練習</span><span class="chip">不計分</span></div>
+    <h2>SQL 練習場</h2>
+    <p class="lead">整個拾光茶飲資料庫都在這裡，想查什麼就查什麼。可以試著自己出題：哪個時段最忙？金卡會員愛喝什麼？外送訂單的平均杯數是多少？</p>
+    <label class="sr" for="sql-editor">SQL 編輯器</label>
+    <textarea id="sql-editor" spellcheck="false" autocapitalize="off" autocomplete="off">${esc(S.drafts.sandbox||"SELECT member_tier, COUNT(*) AS members\nFROM customers\nGROUP BY member_tier;")}</textarea>
+    <div class="actions"><button class="btn primary" id="run" type="button" ${db?'':'disabled'}>${db?'執行查詢':'資料庫建立中…'}</button><span class="kbd">Ctrl / ⌘ + Enter</span></div>
+    <div id="result"></div>
+  </section>`;
+  const ed=$('#sql-editor'), out=$('#result');
+  ed.oninput=()=>{S.drafts.sandbox=ed.value;save()};
+  const run=()=>{if(!db)return;const r=runSQL(ed.value);out.innerHTML=r.err?`<div class="fb bad">${explainErr(r.err)}<span class="raw">${esc(r.err)}</span></div>`:tableHTML(r.res)};
+  ed.onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();run()}else if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();const s=ed.selectionStart;ed.setRangeText('  ',s,ed.selectionEnd,'end');ed.oninput()}};
+  $('#run').onclick=run;
+  if(db)run();
+}
+
+function renderSchema(){
+  const cnt=t=>{if(!db)return '';try{return db.exec(`SELECT COUNT(*) FROM ${t}`)[0].values[0][0].toLocaleString('en-US')+' 筆'}catch(e){return '已被刪除'}};
+  $('#schema').innerHTML=`<h3>資料表</h3><p class="lead">拾光茶飲 · 2026/7/1–10/31 · SQLite</p>
+  ${SCHEMA.map(([t,zh,cols],i)=>`<details ${i<5?'open':''}><summary><code>${t}</code><span>${zh} · ${cnt(t)}</span></summary>
+    <ul class="cols">${cols.map(([c,d])=>`<li><code>${c}</code><span>${d}</span></li>`).join('')}</ul>
+    <button class="pv" type="button" data-t="${t}">預覽前 5 列</button><div class="pvbox" id="pv-${t}"></div></details>`).join('')}
+  <div class="actions" style="margin-top:6px"><button class="btn" id="rebuild" type="button">重建資料庫</button></div>
+  <p class="meta">不小心 DELETE 或 DROP 了資料也沒關係，按「重建資料庫」就會還原。</p>`;
+  $('#schema').querySelectorAll('.pv').forEach(b=>b.onclick=()=>{
+    const box=$('#pv-'+b.dataset.t); if(box.innerHTML){box.innerHTML='';return}
+    if(!db)return; const r=runSQL(`SELECT * FROM ${b.dataset.t} LIMIT 5`); box.innerHTML=r.err?`<p class="meta">${esc(r.err)}</p>`:tableHTML(r.res,5).replace(/<p class="meta">.*<\/p>$/,'');
+  });
+  $('#rebuild').onclick=()=>{if(!SQLlib)return;db.close();db=buildDB(SQLlib);renderSchema();toast('資料庫已還原')};
+}
+
+let tt;
+function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2400)}
+
+/* header buttons */
+$('#btn-skills').onclick=()=>go({mode:'skills',ch:S.view.ch,step:S.view.step});
+(()=>{const b=$('#btn-reset');let armed=false;b.onclick=()=>{
+  if(!armed){armed=true;b.textContent='再按一次確認重置';b.classList.add('warn');setTimeout(()=>{armed=false;b.textContent='重置進度';b.classList.remove('warn')},3500);return}
+  S=blank();S.epoch=Date.now();save();armed=false;b.textContent='重置進度';b.classList.remove('warn');renderHeader();go({ch:0,step:0});toast('進度已重置')}})();
+
+/* boot */
+renderHeader(); renderQueue(); renderMain(); renderSchema();
+initCloud();
+if(typeof initSqlJs!=='function'){
+  $('#main').insertAdjacentHTML('afterbegin','<div class="fb bad">SQL 引擎沒有載入成功，請重新整理頁面再試一次。</div>');
+} else initSqlJs().then(SQL=>{
+  SQLlib=SQL; db=buildDB(SQL);
+  ALLSTEPS.filter(s=>s.type==='sql').forEach(s=>{const r=db.exec(s.solution);EXP[s.id]=r[r.length-1]});
+  computeVars();
+  renderMain(); renderSchema();
+}).catch(e=>{$('#main').insertAdjacentHTML('afterbegin',`<div class="fb bad">資料庫建立失敗：${esc(e.message||e)}</div>`)});
+</script>
