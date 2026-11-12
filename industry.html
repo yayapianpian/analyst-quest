@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>分析師養成記 產業篇</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="./common.css">
+<style>
+.steps{display:flex;flex-wrap:wrap;gap:6px;list-style:none;margin:0;padding:0}
+.steps button{border:1px solid var(--line);background:transparent;border-radius:999px;padding:3px 12px;font-size:.8rem}
+.steps button.on{border-color:var(--jade);color:var(--jade);font-weight:500}
+.steps button.y::before{content:"✓ ";color:var(--jade);font-weight:700}
+.steps .sep{align-self:center;font-size:.75rem;color:var(--muted);padding:0 4px}
+.q-prompt{font-size:1.02rem;max-width:70ch}
+.q-prompt code,.hint code,.bubble code{font-size:.85em;background:var(--sunk);padding:0 4px;border-radius:4px}
+.out{font-size:.85rem;background:var(--sunk);border-radius:8px;padding:8px 12px}
+.out code{font-size:.82rem}
+.hint{border-left:3px solid var(--amber);background:var(--amber-soft);padding:6px 12px;border-radius:0 8px 8px 0;font-size:.9rem}
+.hint code{background:transparent}
+.options{display:flex;flex-direction:column;gap:8px}
+.opt{text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 14px;display:flex;flex-direction:column;gap:6px}
+.opt:hover:not(:disabled){border-color:var(--jade)}
+.opt:disabled{cursor:default}
+.opt .ofb{font-size:.86rem;border-top:1px dashed var(--line);padding-top:6px}
+.opt.wrong{border-color:var(--bad);background:var(--bad-soft)}
+.opt.right{border-color:var(--ok);background:var(--ok-soft)}
+.opt .tag{font-size:.72rem;font-weight:700;letter-spacing:.08em}
+.opt.wrong .tag{color:var(--bad)} .opt.right .tag{color:var(--ok)}
+dl.gloss{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:8px;margin:0}
+dl.gloss div{background:var(--sunk);border-radius:10px;padding:8px 12px}
+dl.gloss dt{font-weight:700}
+dl.gloss dd{margin:0;font-size:.88rem;color:var(--muted)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.cols{list-style:none;margin:4px 0 0;padding:0;font-size:.8rem;display:flex;flex-direction:column;gap:2px}
+.cols li{display:flex;justify-content:space-between;gap:8px}
+.cols code{font-size:.76rem}
+.cols span{color:var(--muted);text-align:right}
+.pv{font-size:.75rem;border:none;background:none;color:var(--jade);padding:0;text-decoration:underline;text-underline-offset:3px}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <h1>分析師養成記</h1><span class="sub">產業篇 · 換一個產業，問題和指標都不一樣</span>
+  <span id="nav"></span>
+</div></header>
+<div class="wrap">
+  <section class="card">
+    <span class="eyebrow">選一個產業</span>
+    <div class="grid" id="inds"></div>
+    <p class="lead">每個產業都有自己的資料庫、術語和典型問題。先讀產業速覽，再接案件。SQL 語法和前面一樣，差別在於你要先懂這個產業在乎什麼。</p>
+  </section>
+  <section class="card" id="overview"></section>
+  <section class="card" id="ticket"></section>
+  <section class="card" id="task"></section>
+  <section class="card"><h2>資料表</h2><div class="two" id="schema"></div></section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-asm.js"></script>
+<script src="./common.js?v=4"></script>
+<script>
+$('#nav').outerHTML=siteNav('產業篇');
+const DAYMS=864e5, HR=36e5;
+const iso=t=>new Date(t).toISOString();
+const dsD=t=>iso(t).slice(0,10), dsT=t=>iso(t).slice(0,19).replace('T',' ');
+function rng(seed){const R=mulberry32(seed);return {R,pick:a=>a[Math.floor(R()*a.length)],wpick:(items,w)=>{let s=0;for(const x of w)s+=x;let r=R()*s;for(let i=0;i<items.length;i++){r-=w[i];if(r<0)return items[i]}return items[items.length-1]}}}
+
+/* ---------- finance data ---------- */
+function genFin(){
+  const {R,pick,wpick}=rng(4242);
+  const D={cardholders:[],transactions:[],statements:[]};
+  const CITY=['台北','新北','桃園','台中','台南','高雄'];
+  const LIM={'低':[30000,50000,80000],'中':[80000,120000,200000],'高':[200000,300000,500000]};
+  const cust=[];
+  for(let i=1;i<=800;i++){
+    const inc=wpick(['低','中','高'],[35,45,20]), lim=pick(LIM[inc]), od=Date.UTC(2024,0,1)+Math.floor(R()*912)*DAYMS;
+    cust.push({id:i,inc,lim,oy:new Date(od).getUTCFullYear(),u:Math.pow(R(),1.4)});
+    D.cardholders.push([i,22+Math.floor(R()*44),pick(CITY),inc,lim,dsD(od)]);
+  }
+  const CAT=['超市','餐飲','網購','加油','旅遊','精品','海外網站'], CW=[25,25,22,10,8,5,5];
+  const AMT={'超市':[200,3000],'餐飲':[100,2500],'網購':[300,8000],'加油':[500,2000],'旅遊':[2000,40000],'精品':[5000,80000],'海外網站':[300,15000]};
+  const HOURS=[...Array(24).keys()], HW=HOURS.map(h=>h<6?0.6:h<9?3:h<23?6:3);
+  let tid=1; const D0=Date.UTC(2026,6,1);
+  for(let d=0;d<123;d++){
+    const date=dsD(D0+d*DAYMS), n=85+Math.floor(R()*30);
+    for(let k=0;k<n;k++){
+      const c=pick(cust), cat=wpick(CAT,CW), hour=wpick(HOURS,HW);
+      let ch='實體', country='TW';
+      if(cat==='網購'||cat==='海外網站')ch='線上'; else if(cat==='旅遊'&&R()<0.5)ch='線上'; else if(cat==='餐飲'&&R()<0.1)ch='線上';
+      if(cat==='海外網站')country=pick(['US','CN','SG','NL']); else if(cat==='旅遊'&&R()<0.3)country=pick(['JP','KR','TH']);
+      const [lo,hi]=AMT[cat]; let amt=Math.round(lo+(hi-lo)*Math.pow(R(),2.2));
+      let p=0.002; if(ch==='線上')p*=3; if(ch==='線上'&&country!=='TW')p*=8; if(hour<6)p*=4; p=Math.min(p,0.5);
+      const fraud=R()<p?1:0; if(fraud)amt=Math.round(amt*(2+R()*3));
+      D.transactions.push([tid++,c.id,date,hour,cat,ch,country,amt,fraud]);
+    }
+  }
+  const MON=['2026-07','2026-08','2026-09','2026-10'], MF=[0.8,0.95,1.15,1.45], ROLL=[0,0.30,0.38,0.48];
+  for(const c of cust){
+    let dpd=0; const base={'低':0.035,'中':0.018,'高':0.007}[c.inc], vf=c.oy===2026?2.2:c.oy===2025?1.2:0.8;
+    MON.forEach((m,mi)=>{
+      const u=Math.max(0.02,Math.min(1.05,c.u+(R()-0.5)*0.15)), uf=u>0.8?4:u>=0.3?1.5:0.6;
+      const q=Math.min(0.5,base*vf*uf*MF[mi]*2.5);
+      if(mi===0){const r=R();dpd=r<q*0.4?30+Math.floor(R()*45):r<q*1.4?1+Math.floor(R()*29):0}
+      else if(dpd===0){dpd=R()<q?1+Math.floor(R()*29):0}
+      else if(dpd<30){const r=R(),roll=ROLL[mi]+(u>0.8?0.15:0);dpd=r<roll?30+Math.floor(R()*29):r<roll+0.4?0:1+Math.floor(R()*29)}
+      else{const r=R();dpd=r<0.6?dpd+30:r<0.82?0:dpd}
+      const bal=Math.round(c.lim*u), min=Math.round(bal*0.1);
+      const paid=dpd===0?(R()<0.6?bal:Math.round(min+(bal-min)*R()*0.5)):(R()<0.5?0:Math.round(min*R()*0.8));
+      D.statements.push([c.id,m,bal,min,paid,dpd]);
+    });
+  }
+  return D;
+}
+/* ---------- semiconductor data ---------- */
+function genSemi(){
+  const {R,pick,wpick}=rng(9090);
+  const D={tools:[],lots:[],process_steps:[],wafer_tests:[],defects:[],tool_downtime:[]};
+  const STEPS=[['薄膜',['CVD-01','CVD-02'],5,6],['黃光',['LITHO-01','LITHO-02','LITHO-03'],14,5],['蝕刻',['ETCH-01','ETCH-02','ETCH-03','ETCH-04'],6,4],['擴散',['DIFF-01','DIFF-02'],8,10],['CMP',['CMP-01','CMP-02'],4,3],['測試',['TEST-01','TEST-02','TEST-03'],6,8]];
+  const allTools=[];
+  STEPS.forEach(s=>s[1].forEach(t=>{allTools.push(t);D.tools.push([t,s[0],pick(['曜科','東研','歐儀']),2016+Math.floor(R()*9)])}));
+  const D0=Date.UTC(2026,6,1), OCT1=Date.UTC(2026,9,1), SEP15=Date.UTC(2026,8,15);
+  const BASE={'PMIC-A':0.945,'MCU-B':0.92,'RF-C':0.88}, GROSS={'PMIC-A':1200,'MCU-B':800,'RF-C':500};
+  const pois=m=>Math.max(0,Math.round(m+(R()+R()+R()-1.5)*Math.sqrt(m)*1.6));
+  for(let i=1;i<=320;i++){
+    const rel=D0+(i-1)*(112/320)*DAYMS+R()*8*HR, product=wpick(['PMIC-A','MCU-B','RF-C'],[40,35,25]), pri=wpick(['一般','急件'],[85,15]);
+    D.lots.push([i,product,pri,12,dsD(rel)]);
+    let t=rel, exc=false;
+    STEPS.forEach((s,si)=>{
+      let q=s[2]*(0.5+R()); if(pri==='急件')q*=0.35;
+      const oct=t+q*HR>=OCT1;
+      if(s[0]==='黃光'&&oct)q*=1.9;
+      const tool=(s[0]==='黃光'&&oct)?wpick(s[1],[1,0.3,1]):pick(s[1]);
+      const st=t+q*HR, en=st+s[3]*(0.85+R()*0.3)*HR;
+      D.process_steps.push([i,si+1,s[0],tool,dsT(st),dsT(en)]);
+      if(s[0]==='蝕刻'&&tool==='ETCH-03'&&st>=SEP15)exc=true;
+      t=en;
+    });
+    const by=BASE[product]+(R()-0.5)*0.03-(exc?0.09:0);
+    for(let w=1;w<=12;w++){
+      const y=Math.min(0.995,Math.max(0.3,by+(R()-0.5)*0.02)), wid=i*100+w;
+      D.wafer_tests.push([wid,i,dsD(t),GROSS[product],Math.round(GROSS[product]*y)]);
+      for(const [ty,m] of [['微粒',3],['刮傷',1],['圖形缺陷',2],['邊緣剝離',1]]){
+        const c=pois(m+(exc&&ty==='微粒'?14:0)); if(c>0)D.defects.push([wid,ty,c]);
+      }
+    }
+  }
+  for(const tool of allTools)for(let d=0;d<123;d++){
+    const t=D0+d*DAYMS, bad=tool==='LITHO-02'&&t>=OCT1;
+    if(R()<(bad?0.6:0.12)){
+      const reason=bad?wpick(['故障','預防保養','換線'],[80,10,10]):wpick(['預防保養','故障','換線'],[50,30,20]);
+      D.tool_downtime.push([tool,dsD(t),bad?120+Math.floor(R()*480):30+Math.floor(R()*210),reason]);
+    }
+  }
+  D.tool_downtime.push(['ETCH-03','2026-09-14',480,'預防保養']);
+  return D;
+}
+
+/* ---------- industries ---------- */
+const IND={
+fin:{name:'金融業',org:'澄海銀行 · 信用卡事業處',tag:'風險與詐欺',seedGen:genFin,
+ ddl:{cardholders:'customer_id INTEGER PRIMARY KEY,age INTEGER,city TEXT,income_band TEXT,credit_limit INTEGER,open_date TEXT',
+      transactions:'txn_id INTEGER PRIMARY KEY,customer_id INTEGER,txn_date TEXT,txn_hour INTEGER,merchant_category TEXT,channel TEXT,country TEXT,amount INTEGER,is_fraud INTEGER',
+      statements:'customer_id INTEGER,month TEXT,balance INTEGER,min_due INTEGER,paid_amount INTEGER,days_past_due INTEGER'},
+ docs:{cardholders:['持卡人',{customer_id:'持卡人編號',age:'年齡',city:'居住城市',income_band:'收入級距：低 / 中 / 高',credit_limit:'信用額度',open_date:'開卡日'}],
+       transactions:['刷卡交易',{txn_id:'交易編號',customer_id:'持卡人',txn_date:'交易日期',txn_hour:'交易時間（0–23 時）',merchant_category:'商店類別',channel:'實體 / 線上',country:'交易國家',amount:'金額',is_fraud:'是否為盜刷（1 = 是）'}],
+       statements:['每月帳單',{customer_id:'持卡人',month:'帳單月份 YYYY-MM',balance:'帳單金額',min_due:'最低應繳',paid_amount:'實際繳款',days_past_due:'逾期天數（0 = 正常）'}]},
+ overview:{
+  what:'金融業的分析師大多在風險管理、詐欺偵測、行銷和法遵這幾個部門。和零售業最大的不同是：錯誤的代價很高，而且受到嚴格監管。一個判斷錯誤可能是幾百萬的呆帳，或是一張罰單。',
+  gloss:[['逾期天數（DPD）','超過繳款期限的天數。常分成 M1（1–29 天）、M2（30–59 天）、M3（60–89 天）。'],['30+ 逾期率','逾期 30 天以上的帳戶占比，信用風險最常看的指標。'],['額度使用率','帳單金額 ÷ 信用額度。使用率長期偏高的客戶違約風險較高。'],['Vintage 分析','依開戶時間分群，比較各批客戶的後續表現，用來評估核卡政策的品質。'],['滾動率（Roll rate）','這個月輕微逾期的帳戶，下個月惡化成更嚴重逾期的比例。'],['精確率與召回率','規則攔下的交易中有多少真的是盜刷（精確率）；所有盜刷中攔下了多少（召回率）。']],
+  problems:['盜刷偵測：規則或模型抓得到多少、誤擋多少正常交易','信用風險：哪些客群逾期率上升、核卡政策是否太鬆','客戶流失：哪些客戶快要不用卡了、怎麼挽回','行銷成效：回饋活動有沒有帶來新增消費，還是只補貼原本就會刷的人','法遵與洗錢防制：異常交易監控、報表正確性'],
+  projects:['信用卡詐欺偵測：Kaggle 的 Credit Card Fraud Detection 資料集，練習處理極度不平衡的資料','違約預測：Kaggle 的 Give Me Some Credit 或 Home Credit Default Risk','用本頁的資料寫一份「10 月逾期率上升原因」報告，放進作品集']},
+ cases:[
+  {id:'F1',title:'盜刷警報',who:'周協理',role:'風險管理部',i:'周',intro:'最近客服接到不少盜刷申訴。我們現在有一條攔截規則，但不知道效果好不好。先幫我看看盜刷集中在哪裡，再評估那條規則。'},
+  {id:'F2',title:'逾期在升溫',who:'沈經理',role:'信用風險科',i:'沈',intro:'我感覺這幾個月催收的案件變多了。逾期是不是真的在惡化？是哪些客群？業務那邊還想放寬核卡，我需要數字。'}],
+ steps:[
+  {id:'f1',c:'F1',type:'sql',title:'各通路的盜刷率',prompt:'實體和線上通路各有幾筆交易、幾筆盜刷、盜刷率是多少？盜刷率用百分比，四捨五入到小數 2 位。',out:'channel, txns, frauds, fraud_rate_pct',
+   hints:['<code>is_fraud</code> 是 0 或 1，<code>SUM(is_fraud)</code> 就是盜刷筆數。','<code>ROUND(100.0 * SUM(is_fraud) / COUNT(*), 2)</code>'],
+   sol:"SELECT channel,\n       COUNT(*) AS txns,\n       SUM(is_fraud) AS frauds,\n       ROUND(100.0 * SUM(is_fraud) / COUNT(*), 2) AS fraud_rate_pct\nFROM transactions\nGROUP BY channel;"},
+  {id:'f2',c:'F1',type:'sql',title:'哪種商店最危險',prompt:'各商店類別的盜刷筆數、盜刷總金額與盜刷率（百分比，小數 2 位）。',out:'merchant_category, frauds, fraud_amount, fraud_rate_pct',
+   hints:['盜刷金額：<code>SUM(CASE WHEN is_fraud = 1 THEN amount ELSE 0 END)</code>','依 <code>merchant_category</code> 分組。'],
+   sol:"SELECT merchant_category,\n       SUM(is_fraud) AS frauds,\n       SUM(CASE WHEN is_fraud = 1 THEN amount ELSE 0 END) AS fraud_amount,\n       ROUND(100.0 * SUM(is_fraud) / COUNT(*), 2) AS fraud_rate_pct\nFROM transactions\nGROUP BY merchant_category;"},
+  {id:'f3',c:'F1',type:'sql',title:'深夜交易',prompt:'把交易分成「深夜」（0 到 5 時）和「其他」，比較兩個時段的交易筆數與盜刷率（百分比，小數 2 位）。',out:'period（深夜 / 其他）, txns, fraud_rate_pct',
+   hints:["<code>CASE WHEN txn_hour < 6 THEN '深夜' ELSE '其他' END</code>",'用這個新欄位分組。'],
+   sol:"SELECT CASE WHEN txn_hour < 6 THEN '深夜' ELSE '其他' END AS period,\n       COUNT(*) AS txns,\n       ROUND(100.0 * SUM(is_fraud) / COUNT(*), 2) AS fraud_rate_pct\nFROM transactions\nGROUP BY period;"},
+  {id:'f4',c:'F1',type:'sql',title:'評估攔截規則',prompt:'現行規則：<code>線上</code>交易、國家不是 <code>TW</code>、金額 ≥ 5000 就攔截。算出：規則攔下幾筆（flagged）、其中幾筆真的是盜刷（caught）、精確率 = caught ÷ flagged、召回率 = caught ÷ 全部盜刷筆數。兩個比率用百分比，小數 1 位。',out:'flagged, caught, precision_pct, recall_pct（一列）',
+   hints:['先在子查詢裡算出每筆交易是否符合規則：<code>(channel = \'線上\' AND country <> \'TW\' AND amount >= 5000) AS hit</code>，結果是 0 或 1。','<code>SUM(hit)</code> 是攔下的筆數，<code>SUM(hit * is_fraud)</code> 是攔對的筆數。','召回率的分母是 <code>SUM(is_fraud)</code>。'],
+   sol:"SELECT SUM(hit) AS flagged,\n       SUM(hit * is_fraud) AS caught,\n       ROUND(100.0 * SUM(hit * is_fraud) / SUM(hit), 1) AS precision_pct,\n       ROUND(100.0 * SUM(hit * is_fraud) / SUM(is_fraud), 1) AS recall_pct\nFROM (\n  SELECT is_fraud,\n         (channel = '線上' AND country <> 'TW' AND amount >= 5000) AS hit\n  FROM transactions\n);"},
+  {id:'f5',c:'F1',type:'choice',title:'調整門檻',prompt:'「這條規則只抓到 {{recall}} 的盜刷。把金額門檻從 5,000 降到 1,000，就能抓到更多了吧？」',
+   options:[
+    {t:'「好，馬上改。」',fb:'門檻降低後，被攔下的正常交易會大量增加。每一筆誤擋都是一位在結帳時被拒絕的客戶。'},
+    {t:'「現在的精確率才 {{precision}}，誤擋已經很多了，應該把門檻調高才對。」',fb:'只看精確率同樣片面。調高門檻會漏掉更多盜刷，要兩邊一起看。'},
+    {t:'「會抓到更多，但誤擋也會增加。我先算出新門檻的精確率和召回率，再估計每誤擋一筆的客訴成本、每漏一筆的盜刷損失，把兩種門檻的總成本放在一起比較。」',ok:true,fb:'詐欺偵測永遠是精確率和召回率的取捨。把兩種錯誤都換算成錢，才能做出決定。'},
+    {t:'「全部交易有 {{accuracy}} 沒被誤判，準確率已經很高，不需要調整。」',fb:'盜刷只占全部交易的 {{fraudRate}}。就算完全不攔，準確率也超過 99%。資料極度不平衡時，準確率沒有參考價值。'}]},
+  {id:'f6',c:'F2',type:'sql',title:'逾期率的趨勢',prompt:'每個月的帳戶數、逾期 30 天以上的帳戶數，以及 30+ 逾期率（百分比，小數 2 位）。',out:'month, accounts, delinquent, rate_pct',
+   hints:['<code>SUM(days_past_due >= 30)</code> 可以直接數出符合條件的列數。','依 <code>month</code> 分組。'],
+   sol:"SELECT month,\n       COUNT(*) AS accounts,\n       SUM(days_past_due >= 30) AS delinquent,\n       ROUND(100.0 * SUM(days_past_due >= 30) / COUNT(*), 2) AS rate_pct\nFROM statements\nGROUP BY month;"},
+  {id:'f7',c:'F2',type:'sql',title:'額度使用率與逾期',prompt:'只看 2026-10 的帳單。依額度使用率（balance ÷ credit_limit）分成三組：低於 0.3 是<code>低</code>、0.3 到 0.8（含）是<code>中</code>、高於 0.8 是<code>高</code>。各組的帳戶數與 30+ 逾期率（百分比，小數 2 位）。',out:'util_band（低 / 中 / 高）, accounts, rate_pct',
+   hints:['信用額度在 <code>cardholders</code>，要 JOIN。','<code>balance * 1.0 / credit_limit</code> 避免整數除法。',"<code>CASE WHEN u < 0.3 THEN '低' WHEN u <= 0.8 THEN '中' ELSE '高' END</code>"],
+   sol:"SELECT CASE WHEN s.balance * 1.0 / c.credit_limit < 0.3 THEN '低'\n            WHEN s.balance * 1.0 / c.credit_limit <= 0.8 THEN '中'\n            ELSE '高' END AS util_band,\n       COUNT(*) AS accounts,\n       ROUND(100.0 * SUM(s.days_past_due >= 30) / COUNT(*), 2) AS rate_pct\nFROM statements s\nJOIN cardholders c ON c.customer_id = s.customer_id\nWHERE s.month = '2026-10'\nGROUP BY util_band;"},
+  {id:'f8',c:'F2',type:'sql',title:'Vintage：哪一年開的卡',prompt:'只看 2026-10 的帳單。依開卡年份分組，各有多少帳戶、30+ 逾期率是多少（百分比，小數 2 位）？',out:'open_year, accounts, rate_pct',
+   hints:["<code>strftime('%Y', c.open_date)</code> 取出開卡年份。",'同樣要 JOIN <code>cardholders</code>。'],
+   sol:"SELECT strftime('%Y', c.open_date) AS open_year,\n       COUNT(*) AS accounts,\n       ROUND(100.0 * SUM(s.days_past_due >= 30) / COUNT(*), 2) AS rate_pct\nFROM statements s\nJOIN cardholders c ON c.customer_id = s.customer_id\nWHERE s.month = '2026-10'\nGROUP BY open_year;"},
+  {id:'f9',c:'F2',type:'sql',title:'滾動率',prompt:'9 月逾期 1 到 29 天的帳戶當中，有多少比例到了 10 月惡化成逾期 30 天以上？百分比，小數 1 位。',out:'一個數字（百分比）',
+   hints:['同一張表要用兩次：9 月的帳單 JOIN 同一位持卡人 10 月的帳單。',"<code>FROM statements s JOIN statements o ON o.customer_id = s.customer_id AND o.month = '2026-10'</code>","<code>WHERE s.month = '2026-09' AND s.days_past_due BETWEEN 1 AND 29</code>"],
+   sol:"SELECT ROUND(100.0 * SUM(o.days_past_due >= 30) / COUNT(*), 1) AS roll_rate_pct\nFROM statements s\nJOIN statements o\n  ON o.customer_id = s.customer_id AND o.month = '2026-10'\nWHERE s.month = '2026-09'\n  AND s.days_past_due BETWEEN 1 AND 29;"},
+  {id:'f10',c:'F2',type:'choice',title:'業務想放寬核卡',prompt:'業務主管：「新戶逾期高一點沒關係，今年要衝發卡量。核卡標準可以再放寬嗎？」',
+   options:[
+    {t:'「不行，風險太高了。」',fb:'直接拒絕沒有說服力，也沒有幫對方找到出路。業務有業績壓力，你需要給數字和替代方案。'},
+    {t:'「2026 年開卡的客戶，10 月 30+ 逾期率是 {{v26}}，2024 年開卡的只有 {{v24}}；高使用率客群更高達 {{utilHigh}}。建議不要全面放寬，改成對高風險客群給較低的起始額度，先小規模試辦，追蹤前三個月的逾期表現再決定。」',ok:true,fb:'用 vintage 數據說明風險，再提出能兼顧業績與風險的做法。風險分析師的價值是幫公司「有控制地成長」。'},
+    {t:'「可以，業績比較重要。」',fb:'逾期會在幾個月後才浮現，到時候呆帳損失會由整個公司承擔，責任也會追溯到當初的評估。'},
+    {t:'「這是業務和風控主管要決定的事，不是分析師該管的。」',fb:'決定權確實不在你，但提供讓決策者看清楚風險的分析，正是分析師的工作。'}]},
+  {id:'f11',c:'F2',type:'choice',title:'個資與法遵',prompt:'行銷同事：「外部廠商要幫我們做活動，你把持卡人姓名、卡號和消費明細匯出來，直接寄到他們的信箱就好。」',
+   options:[
+    {t:'照做，同事之間互相幫忙。',fb:'金融業的客戶資料受到個資法與金融法規嚴格管制，未經核准外流可能讓公司被罰款，你個人也有責任。'},
+    {t:'「這份資料包含個資，我需要先確認合約和法遵是否核准。可以的話，我只提供活動需要的最少欄位，卡號和姓名先去識別化，並透過公司核准的管道傳送。」',ok:true,fb:'最小必要、去識別化、經核准的管道。在金融業，懂得保護資料和會分析資料一樣重要。'},
+    {t:'把檔案加上密碼再寄出去。',fb:'加密只解決傳輸安全，沒有解決「能不能給」和「該給多少」的問題。'},
+    {t:'「我不能給。」然後就不理他。',fb:'拒絕是對的，但行銷活動還是要做。告訴對方合規的做法，問題才會解決。'}]}
+ ]},
+semi:{name:'半導體製造',org:'曜石半導體 · 八吋晶圓廠',tag:'良率與產能',seedGen:genSemi,
+ ddl:{tools:'tool_id TEXT PRIMARY KEY,step TEXT,vendor TEXT,install_year INTEGER',
+      lots:'lot_id INTEGER PRIMARY KEY,product TEXT,priority TEXT,wafer_count INTEGER,release_date TEXT',
+      process_steps:'lot_id INTEGER,step_seq INTEGER,step TEXT,tool_id TEXT,start_time TEXT,end_time TEXT',
+      wafer_tests:'wafer_id INTEGER PRIMARY KEY,lot_id INTEGER,test_date TEXT,gross_die INTEGER,good_die INTEGER',
+      defects:'wafer_id INTEGER,defect_type TEXT,defect_count INTEGER',
+      tool_downtime:'tool_id TEXT,down_date TEXT,down_minutes INTEGER,reason TEXT'},
+ docs:{lots:['生產批',{lot_id:'批號',product:'產品',priority:'一般 / 急件',wafer_count:'晶圓片數',release_date:'投片日'}],
+       process_steps:['製程紀錄',{lot_id:'批號',step_seq:'站點順序（1–6）',step:'製程站',tool_id:'使用的機台',start_time:'開始時間',end_time:'結束時間'}],
+       wafer_tests:['晶圓測試結果',{wafer_id:'晶圓編號',lot_id:'批號',test_date:'測試日期',gross_die:'總晶粒數',good_die:'良品晶粒數'}],
+       defects:['缺陷檢測',{wafer_id:'晶圓編號',defect_type:'缺陷類型',defect_count:'缺陷數量'}],
+       tools:['機台',{tool_id:'機台編號',step:'所屬製程站',vendor:'供應商',install_year:'裝機年份'}],
+       tool_downtime:['機台停機紀錄',{tool_id:'機台',down_date:'日期',down_minutes:'停機分鐘數',reason:'預防保養 / 故障 / 換線'}]},
+ overview:{
+  what:'半導體廠的分析師常見於良率工程、製造管理（生管）、設備和品保部門。資料量大、來源多（機台、量測、測試），而且你分析的對象是物理製程，所以一定要和工程師密切合作。本頁把製程簡化成 6 站，真實的晶圓要經過幾百道步驟。',
+  gloss:[['Lot、Wafer、Die','一批（lot）有多片晶圓（wafer），一片晶圓切成很多顆晶粒（die）。'],['良率（Yield）','良品晶粒數 ÷ 總晶粒數。良率差 1% 可能就是幾百萬的損失。'],['共通性分析','良率異常時，找出問題批「共同經過」的機台、時間或材料，是定位原因最常用的方法。'],['柏拉圖（Pareto）','把缺陷類型由多到少排列，先處理占比最大的那一兩項。'],['生產週期（Cycle time）','一批貨從投片到產出的時間，包含加工時間和排隊等待時間。'],['稼動率','機台可用時間的比例。停機原因分成預防保養、故障和換線。'],['瓶頸站','產能最吃緊的製程站，它決定了整座工廠的產出速度。']],
+  problems:['良率異常：良率突然下降，要快速找出是哪台機台、哪個時間點開始','缺陷分析：哪種缺陷變多了、集中在哪些晶圓','交期與產能：貨卡在哪一站、哪台機台拖累產出','設備管理：哪些機台故障最頻繁、保養排程是否合理','成本：報廢、重工造成的損失'],
+  projects:['UCI SECOM 資料集：半導體製程感測器資料，練習找出與良率相關的訊號','WM-811K 晶圓圖資料集：缺陷圖樣分類','用本頁的資料寫一份「9 月良率異常調查報告」，放進作品集']},
+ cases:[
+  {id:'S1',title:'良率掉了',who:'許工程師',role:'良率整合工程部',i:'許',intro:'9 月中之後，測試站回報的良率一直不太對勁，但每個產品都說自己沒改製程。可以幫我從資料裡找出問題出在哪嗎？'},
+  {id:'S2',title:'交期來不及',who:'邱廠長',role:'製造部',i:'邱',intro:'10 月好幾批貨都延遲交貨，客戶在抱怨。有人建議再買一台機台，但那要花好幾億。先幫我看看貨到底卡在哪裡。'}],
+ steps:[
+  {id:'s1',c:'S1',type:'sql',title:'各產品每月良率',prompt:'各產品每個月的良率（依測試日期）。良率 = 良品晶粒總數 ÷ 總晶粒數，用百分比，小數 1 位。',out:'product, month（YYYY-MM）, yield_pct',
+   hints:['產品在 <code>lots</code>，測試結果在 <code>wafer_tests</code>，用 lot_id 連接。','良率要先加總再相除：<code>100.0 * SUM(good_die) / SUM(gross_die)</code>，不要對每片的良率取平均。'],
+   sol:"SELECT l.product,\n       strftime('%Y-%m', w.test_date) AS month,\n       ROUND(100.0 * SUM(w.good_die) / SUM(w.gross_die), 1) AS yield_pct\nFROM wafer_tests w\nJOIN lots l ON l.lot_id = w.lot_id\nGROUP BY l.product, month;"},
+  {id:'s2',c:'S1',type:'sql',title:'共通性分析：蝕刻機台',prompt:'每個產品的良率都小幅下滑，代表問題可能出在共用的機台。先查蝕刻站：蝕刻開始時間在 2026-09-15 之後的批，依蝕刻機台分組，各有幾片晶圓、良率是多少（百分比，小數 1 位）？',out:'tool_id, wafers, yield_pct',
+   hints:["<code>wafer_tests</code> 用 lot_id 連到 <code>process_steps</code>，並限定 <code>step = '蝕刻'</code>。","時間是文字格式，可以直接比較：<code>start_time >= '2026-09-15'</code>"],
+   sol:"SELECT ps.tool_id,\n       COUNT(*) AS wafers,\n       ROUND(100.0 * SUM(w.good_die) / SUM(w.gross_die), 1) AS yield_pct\nFROM wafer_tests w\nJOIN process_steps ps ON ps.lot_id = w.lot_id AND ps.step = '蝕刻'\nWHERE ps.start_time >= '2026-09-15'\nGROUP BY ps.tool_id;"},
+  {id:'s3',c:'S1',type:'sql',title:'ETCH-03 的前後比較',prompt:'只看經過 ETCH-03 蝕刻的批。以 2026-09-15 為分界，分成<code>之前</code>和<code>之後</code>，各有幾批、良率是多少（百分比，小數 1 位）？',out:'period（之前 / 之後）, lots, yield_pct',
+   hints:["<code>CASE WHEN ps.start_time >= '2026-09-15' THEN '之後' ELSE '之前' END</code>",'批數要用 <code>COUNT(DISTINCT w.lot_id)</code>，因為一批有 12 片晶圓。'],
+   sol:"SELECT CASE WHEN ps.start_time >= '2026-09-15' THEN '之後' ELSE '之前' END AS period,\n       COUNT(DISTINCT w.lot_id) AS lots,\n       ROUND(100.0 * SUM(w.good_die) / SUM(w.gross_die), 1) AS yield_pct\nFROM wafer_tests w\nJOIN process_steps ps ON ps.lot_id = w.lot_id AND ps.step = '蝕刻'\nWHERE ps.tool_id = 'ETCH-03'\nGROUP BY period;"},
+  {id:'s4',c:'S1',type:'sql',title:'缺陷柏拉圖',prompt:'2026-09-15 之後經過 ETCH-03 蝕刻的晶圓，各缺陷類型的總數量，由多到少排列。',out:'defect_type, total_defects（由多到少）',ordered:true,
+   hints:['<code>defects</code> 用 wafer_id 連到 <code>wafer_tests</code>，再用 lot_id 連到 <code>process_steps</code>。',"條件：<code>ps.step = '蝕刻' AND ps.tool_id = 'ETCH-03' AND ps.start_time >= '2026-09-15'</code>"],
+   sol:"SELECT d.defect_type,\n       SUM(d.defect_count) AS total_defects\nFROM defects d\nJOIN wafer_tests w ON w.wafer_id = d.wafer_id\nJOIN process_steps ps ON ps.lot_id = w.lot_id AND ps.step = '蝕刻'\nWHERE ps.tool_id = 'ETCH-03'\n  AND ps.start_time >= '2026-09-15'\nGROUP BY d.defect_type\nORDER BY total_defects DESC;"},
+  {id:'s5',c:'S1',type:'choice',title:'向工程師回報',prompt:'你發現 9/15 之後經過 ETCH-03 的批，良率只有 {{y03}}，其他蝕刻機台是 {{yOther}}；微粒缺陷平均每片 {{p03}} 顆，其他機台是 {{pOther}} 顆。你怎麼跟許工程師說？',
+   options:[
+    {t:'「ETCH-03 壞了，請馬上停機。」',fb:'停機與否是設備和製程工程師的判斷，一台機台停下來會影響整條線的產出。你該提供證據，而不是直接下指令。'},
+    {t:'「資料顯示 9/15 之後經過 ETCH-03 的 {{lots03}} 批良率偏低，微粒缺陷明顯增加，其他機台正常。停機紀錄顯示 ETCH-03 在 9/14 做過預防保養，時間點吻合。我懷疑保養後腔體有微粒問題，想請你們檢查；也可以把同一批貨分一半走其他機台來驗證。」',ok:true,fb:'有比較基準、有時間點、有佐證資料（保養紀錄），並提出可以驗證的方法。原因由工程師確認，你負責把範圍縮到最小。'},
+    {t:'「應該是產品設計的問題。」',fb:'三個產品同時下滑，而且只發生在經過特定機台的批，指向的是機台而不是設計。'},
+    {t:'「樣本還不夠多，再觀察一個月。」',fb:'目前已有幾百片晶圓的資料，差異非常明顯。每多等一天，就有更多晶圓經過這台機台而報廢。'}]},
+  {id:'s6',c:'S2',type:'sql',title:'各站的加工時間',prompt:'每個製程站的平均加工時間（小時，小數 1 位）。加工時間 = 結束時間 − 開始時間。',out:'step, avg_hours',
+   hints:['SQLite 用 <code>julianday()</code> 把時間轉成天數，兩個相減再乘 24 就是小時。','<code>AVG((julianday(end_time) - julianday(start_time)) * 24)</code>'],
+   sol:"SELECT step,\n       ROUND(AVG((julianday(end_time) - julianday(start_time)) * 24), 1) AS avg_hours\nFROM process_steps\nGROUP BY step;"},
+  {id:'s7',c:'S2',type:'sql',title:'貨在哪一站排隊',prompt:'加工時間看不出問題，改看等待時間。等待時間 = 這一站的開始時間 − 同一批上一站的結束時間。只看 2026-10-01 之後開始的站點，各站的平均等待時間（小時，小數 1 位），由長到短。第一站沒有上一站，不用列出。',out:'step, avg_wait_hours（由長到短）',ordered:true,
+   hints:['<code>LAG(end_time) OVER (PARTITION BY lot_id ORDER BY step_seq)</code> 可以拿到同一批上一站的結束時間。','視窗函數要先放在 CTE 或子查詢，外層再篩選和分組。',"外層條件：<code>prev_end IS NOT NULL AND start_time >= '2026-10-01'</code>"],
+   sol:"WITH t AS (\n  SELECT step, start_time,\n         LAG(end_time) OVER (PARTITION BY lot_id ORDER BY step_seq) AS prev_end\n  FROM process_steps\n)\nSELECT step,\n       ROUND(AVG((julianday(start_time) - julianday(prev_end)) * 24), 1) AS avg_wait_hours\nFROM t\nWHERE prev_end IS NOT NULL\n  AND start_time >= '2026-10-01'\nGROUP BY step\nORDER BY avg_wait_hours DESC;"},
+  {id:'s8',c:'S2',type:'sql',title:'機台稼動率',prompt:'10 月（31 天）各機台的總停機分鐘數與稼動率。稼動率 = 1 − 停機分鐘 ÷（31 × 1440），用百分比，小數 1 位。列出所有機台，看看哪一台特別低。',out:'tool_id, down_minutes, availability_pct',
+   hints:["篩選 10 月：<code>down_date BETWEEN '2026-10-01' AND '2026-10-31'</code>",'<code>ROUND(100.0 * (1 - SUM(down_minutes) / (31 * 1440.0)), 1)</code>','加上 <code>ORDER BY availability_pct</code> 比較好讀，最低的會排在最上面。'],
+   sol:"SELECT tool_id,\n       SUM(down_minutes) AS down_minutes,\n       ROUND(100.0 * (1 - SUM(down_minutes) / (31 * 1440.0)), 1) AS availability_pct\nFROM tool_downtime\nWHERE down_date BETWEEN '2026-10-01' AND '2026-10-31'\nGROUP BY tool_id\nORDER BY availability_pct;"},
+  {id:'s9',c:'S2',type:'sql',title:'急件真的比較快嗎',prompt:'每批的生產週期 = 最後一站結束時間 − 第一站開始時間（天）。一般件和急件各有幾批、平均生產週期是幾天（小數 1 位）？',out:'priority, lots, avg_cycle_days',
+   hints:['先用 CTE 算出每批的週期：<code>julianday(MAX(end_time)) - julianday(MIN(start_time))</code>，依 lot_id 分組。','再 JOIN <code>lots</code> 拿到 priority，分組取平均。'],
+   sol:"WITH c AS (\n  SELECT lot_id,\n         julianday(MAX(end_time)) - julianday(MIN(start_time)) AS days\n  FROM process_steps\n  GROUP BY lot_id\n)\nSELECT l.priority,\n       COUNT(*) AS lots,\n       ROUND(AVG(c.days), 1) AS avg_cycle_days\nFROM c\nJOIN lots l ON l.lot_id = c.lot_id\nGROUP BY l.priority;"},
+  {id:'s10',c:'S2',type:'choice',title:'要不要買機台',prompt:'邱廠長：「交期一直延誤，我打算再買一台黃光機。你覺得呢？」',
+   options:[
+    {t:'「買吧，黃光站明顯是瓶頸。」',fb:'黃光站確實是瓶頸，但你還沒回答「為什麼是瓶頸」。如果原因是現有機台常故障，買新機台是最貴的解法。'},
+    {t:'「請每一站都加班趕工。」',fb:'非瓶頸站做得再快，貨也只是更早堆到黃光站前面排隊。整廠的產出由瓶頸站決定。'},
+    {t:'「10 月黃光站平均要等 {{waitLitho}} 小時，其他站最多 {{waitNext}} 小時，瓶頸確實在黃光。但 LITHO-02 這個月稼動率只有 {{availL2}}，停機大多是故障，其他機台都在 {{availOther}} 以上。建議先把 LITHO-02 修回正常水準，觀察等待時間是否恢復，再評估要不要買。」',ok:true,fb:'先找出瓶頸，再問瓶頸的原因。用維修解決可能只要幾天，買機台要幾億和好幾個月。'},
+    {t:'「把急件制度取消，大家公平排隊。」',fb:'急件只占少數，取消並不能增加黃光站的產能。'}]},
+  {id:'s11',c:'S2',type:'choice',title:'聽不懂現場的話',prompt:'你剛進半導體廠，會議上的 recipe、chamber、PM、WIP 都聽不懂，交出去的分析也常被工程師說「不符合現場狀況」。怎麼辦？',
+   options:[
+    {t:'自己上網查術語就好，不要麻煩別人。',fb:'查術語有幫助，但每座工廠的流程和習慣都不同，網路上查不到你們產線的實際狀況。'},
+    {t:'堅持數據不會騙人，請工程師相信分析結果。',fb:'數據不會騙人，但你可能誤解了數據的意義。例如某一站時間特別長，可能是量測抽檢而不是異常。'},
+    {t:'請工程師開會時改用你聽得懂的說法。',fb:'要融入的是你。學會對方的語言，才能問出好問題。'},
+    {t:'主動請工程師帶你走一次產線，請他們畫出製程流程，了解每張資料表是在哪個環節產生的；分析前先跟他們確認假設。',ok:true,fb:'製造業的分析一定要懂製程。到現場看過，你才知道資料是怎麼產生的、哪些數字合理。這也是轉職者最快建立信任的方式。'}]}
+ ]}
+};
+
+/* ---------- engine ---------- */
+const KEY='analyst-quest-industry-v1';
+const S=loadState(KEY,{ind:'fin',step:{},solved:{},hints:{},sol:{},picked:{},drafts:{}});
+const save=()=>saveState(KEY,S);
+const DBS={}, EXP={}, V={};
+const I=()=>IND[S.ind];
+const cur=()=>{const n=I().steps.length;return Math.min(S.step[S.ind]||0,n-1)};
+const fill=s=>String(s).replace(/\{\{(\w+)\}\}/g,(_,k)=>V[k]!=null?V[k]:'…');
+const pc=(x,d=1)=>x.toFixed(d)+'%';
+
+async function buildDBs(){
+  const SQL=await initSqlJs();
+  for(const [k,ind] of Object.entries(IND)){
+    const db=new SQL.Database(), D=ind.seedGen();
+    db.exec(Object.entries(ind.ddl).map(([t,c])=>`CREATE TABLE ${t}(${c});`).join('\n'));
+    db.exec('BEGIN');
+    for(const [t,c] of Object.entries(ind.ddl)){const st=db.prepare(`INSERT INTO ${t} VALUES (${c.split(',').map(()=>'?').join(',')})`);D[t].forEach(r=>st.run(r));st.free()}
+    db.exec('COMMIT');
+    DBS[k]=db;
+    ind.steps.filter(s=>s.type==='sql').forEach(s=>{const r=db.exec(s.sol);EXP[s.id]=r[r.length-1]});
+  }
+  const f=DBS.fin, v=(db,q)=>db.exec(q)[0].values[0][0];
+  const r4=EXP.f4.values[0];
+  V.precision=pc(r4[2]); V.recall=pc(r4[3]);
+  const tot=v(f,'SELECT COUNT(*) FROM transactions'), fr=v(f,'SELECT SUM(is_fraud) FROM transactions');
+  V.fraudRate=pc(100*fr/tot,2); V.accuracy=pc(100*(tot-(r4[0]-r4[1])-(fr-r4[1]))/tot,1);
+  const vy=y=>{const r=EXP.f8.values.find(x=>x[0]===y);return r?pc(r[2],2):'…'}; V.v26=vy('2026'); V.v24=vy('2024');
+  const uh=EXP.f7.values.find(x=>x[0]==='高'); V.utilHigh=uh?pc(uh[2],2):'…';
+  const s=DBS.semi;
+  const e2=EXP.s2.values, e03=e2.find(x=>x[0]==='ETCH-03'), oth=e2.filter(x=>x[0]!=='ETCH-03');
+  V.y03=pc(e03[2]); V.yOther=pc(oth.reduce((a,x)=>a+x[2],0)/oth.length);
+  V.lots03=EXP.s3.values.find(x=>x[0]==='之後')[1];
+  const part=cond=>v(s,`SELECT ROUND(1.0*SUM(COALESCE(d.defect_count,0))/COUNT(*),1) FROM wafer_tests w JOIN process_steps ps ON ps.lot_id=w.lot_id AND ps.step='蝕刻' LEFT JOIN defects d ON d.wafer_id=w.wafer_id AND d.defect_type='微粒' WHERE ps.start_time>='2026-09-15' AND ${cond}`);
+  V.p03=part("ps.tool_id='ETCH-03'"); V.pOther=part("ps.tool_id<>'ETCH-03'");
+  V.waitLitho=EXP.s7.values[0][1]; V.waitNext=EXP.s7.values[1][1];
+  const l2=EXP.s8.values.find(x=>x[0]==='LITHO-02'); V.availL2=l2?pc(l2[2]):'…';
+  V.availOther=pc(Math.floor(Math.min(...EXP.s8.values.filter(x=>x[0]!=='LITHO-02').map(x=>x[2]))),0);
+}
+
+function renderInds(){
+  $('#inds').innerHTML=Object.entries(IND).map(([k,x])=>{const n=x.steps.filter(s=>S.solved[s.id]).length;
+    return `<button class="pick ${k===S.ind?'on':''}" data-k="${k}" type="button"><span class="st">${x.tag}</span><b>${x.name}</b><span>${x.org}</span><span>${n}/${x.steps.length} 完成</span></button>`}).join('');
+  $('#inds').querySelectorAll('.pick').forEach(b=>b.onclick=()=>{S.ind=b.dataset.k;save();renderAll()});
+}
+function renderOverview(){
+  const o=I().overview;
+  $('#overview').innerHTML=`<span class="eyebrow">產業速覽</span><h2>${I().name}的分析師在做什麼</h2>
+    <p class="lead">${o.what}</p>
+    <details class="box" open><summary>一定要懂的術語</summary><dl class="gloss">${o.gloss.map(([t,d])=>`<div><dt>${t}</dt><dd>${d}</dd></div>`).join('')}</dl></details>
+    <div class="two">
+      <details class="box" open><summary>這個產業常見的分析問題</summary><ul class="plain">${o.problems.map(x=>`<li>${x}</li>`).join('')}</ul></details>
+      <details class="box" open><summary>可以放進作品集的專案方向</summary><ul class="plain">${o.projects.map(x=>`<li>${x}</li>`).join('')}</ul></details>
+    </div>`;
+}
+function renderTicket(){
+  const ind=I(), i=cur(), st=ind.steps[i], c=ind.cases.find(x=>x.id===st.c);
+  let h='', last='';
+  ind.steps.forEach((s,j)=>{
+    if(s.c!==last){last=s.c;h+=`<li class="sep">${ind.cases.find(x=>x.id===s.c).title}</li>`}
+    h+=`<li><button type="button" data-j="${j}" class="${j===i?'on':''} ${S.solved[s.id]?'y':''}">${s.title}</button></li>`;
+  });
+  $('#ticket').innerHTML=`<div class="row"><span class="chip">案件 ${c.id}</span><span class="meta">來自 ${c.who}（${c.role}）</span></div>
+    <h2>${c.title}</h2>
+    <div class="msg"><div class="avatar" aria-hidden="true">${c.i}</div><div class="bubble"><small>${c.who}</small>${c.intro}</div></div>
+    <ol class="steps">${h}</ol>`;
+  $('#ticket').querySelectorAll('[data-j]').forEach(b=>b.onclick=()=>{S.step[S.ind]=+b.dataset.j;save();renderTicket();renderTask()});
+}
+function nextHTML(i){return i+1<I().steps.length?'<button class="btn primary" id="next" type="button">下一步</button>':'<span class="chip ok">這個產業的案件全部完成</span>'}
+function renderTask(){
+  const ind=I(), i=cur(), st=ind.steps[i], db=DBS[S.ind], el=$('#task'), done=!!S.solved[st.id];
+  if(st.type==='sql'){
+    const used=S.hints[st.id]||0;
+    el.innerHTML=`<div class="row"><span class="eyebrow">SQL 任務</span><span class="spacer"></span>${done?'<span class="chip ok">已完成</span>':''}</div>
+      <h3>${st.title}</h3><p class="q-prompt">${st.prompt}</p><div class="out">輸出：<code>${st.out}</code></div>
+      <label class="sr" for="sql">SQL 編輯器</label>
+      <textarea class="code" id="sql" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="-- 在這裡寫 SQL，Ctrl + Enter 執行">${esc(S.drafts[st.id]||'')}</textarea>
+      <div class="row"><button class="btn primary" id="run" type="button" ${db?'':'disabled'}>${db?'執行查詢':'資料庫建立中…'}</button><span class="kbd">Ctrl / ⌘ + Enter</span><span class="spacer"></span>
+        ${done?'':`<button class="btn" id="hint" type="button" ${used>=st.hints.length?'disabled':''}>提示 ${used}/${st.hints.length}</button><button class="btn" id="sol" type="button">看解答</button>`}</div>
+      ${st.hints.slice(0,used).map(x=>`<div class="hint">${x}</div>`).join('')}
+      <div id="fb">${done?`<div class="fb ok"><strong>正確！</strong>參考寫法：</div><div style="height:8px"></div><pre class="sol">${esc(st.sol)}</pre><div class="row" style="margin-top:10px">${nextHTML(i)}</div>`:S.sol[st.id]?`<div class="fb info">參考解答（自己打一次再執行，印象會比較深）：</div><div style="height:8px"></div><pre class="sol">${esc(st.sol)}</pre>`:''}</div>
+      <div id="result"></div>`;
+    const ed=$('#sql'); ed.oninput=()=>{S.drafts[st.id]=ed.value;save()};
+    const run=()=>{
+      if(!db)return; const q=ed.value.trim(); if(!q)return;
+      const r=runSQL(db,q);
+      if(r.err){$('#result').innerHTML=errHTML(r.err);return}
+      $('#result').innerHTML=tableHTML(r.res);
+      if(S.solved[st.id])return;
+      const msg=checkResult(r.res,EXP[st.id],!!st.ordered);
+      if(msg===null){S.solved[st.id]=true;save();toast('正確！');const res=r.res;renderInds();renderTicket();renderTask();$('#result').innerHTML=tableHTML(res)}
+      else $('#fb').innerHTML=`<div class="fb info">還差一點：${msg}</div>`;
+    };
+    editorKeys(ed,run); $('#run').onclick=run;
+    const hb=$('#hint'); if(hb)hb.onclick=()=>{S.hints[st.id]=(S.hints[st.id]||0)+1;save();renderTask()};
+    const sb=$('#sol'); if(sb)sb.onclick=()=>{S.sol[st.id]=true;save();renderTask()};
+  } else {
+    const c=ind.cases.find(x=>x.id===st.c), picked=S.picked[st.id]||[];
+    el.innerHTML=`<div class="row"><span class="eyebrow amber">情境判斷</span><span class="spacer"></span>${done?'<span class="chip ok">已完成</span>':''}</div>
+      <h3>${st.title}</h3>
+      <div class="msg"><div class="avatar" aria-hidden="true">${c.i}</div><div class="bubble">${fill(st.prompt)}</div></div>
+      <div class="options">${st.options.map((o,k)=>{const p=picked.includes(k);return `<button class="opt ${p?(o.ok?'right':'wrong'):''}" data-k="${k}" type="button" ${done||p?'disabled':''}>${p?`<span class="tag">${o.ok?'最佳做法':'再想想'}</span>`:''}<span>${fill(o.t)}</span>${p?`<span class="ofb">${fill(o.fb)}</span>`:''}</button>`}).join('')}</div>
+      ${done?`<div class="row">${nextHTML(i)}</div>`:''}`;
+    el.querySelectorAll('.opt').forEach(b=>b.onclick=()=>{const k=+b.dataset.k;S.picked[st.id]=[...picked,k];if(st.options[k].ok){S.solved[st.id]=true;renderInds()}save();renderTicket();renderTask()});
+  }
+  const nx=$('#next'); if(nx)nx.onclick=()=>{S.step[S.ind]=i+1;save();renderTicket();renderTask();$('#ticket').scrollIntoView({behavior:'smooth'})};
+}
+function renderSchema(){
+  const ind=I(), db=DBS[S.ind];
+  $('#schema').innerHTML=Object.entries(ind.docs).map(([t,[zh,cols]])=>`<div><div class="row"><code style="color:var(--jade);font-weight:600">${t}</code><span class="meta">${zh}${db?' · '+db.exec(`SELECT COUNT(*) FROM ${t}`)[0].values[0][0].toLocaleString('en-US')+' 筆':''}</span></div>
+    <ul class="cols">${Object.entries(cols).map(([c,d])=>`<li><code>${c}</code><span>${d}</span></li>`).join('')}</ul>
+    <button class="pv" type="button" data-t="${t}">預覽前 5 列</button><div id="pv-${t}" style="margin-top:6px"></div></div>`).join('');
+  $('#schema').querySelectorAll('.pv').forEach(b=>b.onclick=()=>{const box=$('#pv-'+b.dataset.t);if(box.innerHTML){box.innerHTML='';return}if(!db)return;box.innerHTML=tableHTML(runSQL(db,`SELECT * FROM ${b.dataset.t} LIMIT 5`).res,5).replace(/<p class="meta">.*<\/p>$/,'')});
+}
+function renderAll(){renderInds();renderOverview();renderTicket();renderTask();renderSchema()}
+renderAll();
+buildDBs().then(()=>{renderTask();renderSchema()}).catch(e=>{$('#task').insertAdjacentHTML('afterbegin',`<div class="fb bad">資料庫建立失敗：${esc(e.message||e)}。請重新整理頁面。</div>`)});
+</script>
+</body>
+</html>
