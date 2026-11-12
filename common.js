@@ -158,6 +158,6 @@ function downloadText(name,text,type){
 }
 async function copyText(text){try{await navigator.clipboard.writeText(text);toast('已複製')}catch(e){toast('複製失敗，請手動選取文字')}}
 function siteNav(cur){
-  const items=[['./','SQL 篇'],['./pandas.html','Pandas 篇'],['./interview.html','面試模擬'],['./project.html','結業專案']];
+  const items=[['./','SQL 篇'],['./pandas.html','Pandas 篇'],['./powerbi.html','Power BI 篇'],['./interview.html','面試模擬'],['./project.html','結業專案']];
   return `<nav class="sitenav" aria-label="網站導覽">${items.map(([h,t])=>`<a href="${h}" ${t===cur?'aria-current="page"':''}>${t}</a>`).join('')}</nav>`;
 }

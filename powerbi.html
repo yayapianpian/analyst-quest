@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>分析師養成記 Power BI 篇</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="./common.css">
+<style>
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tabs button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 16px;font-size:.9rem}
+.tabs button[aria-selected="true"]{background:var(--jade);border-color:var(--jade);color:var(--on-jade);font-weight:500}
+.score{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.score div{background:var(--sunk);border-radius:10px;padding:10px 14px}
+.score b{display:block;font-family:var(--f-mono);font-size:1.4rem;font-variant-numeric:tabular-nums}
+.score span{font-size:.8rem;color:var(--muted)}
+.q-prompt{font-size:1.02rem;max-width:70ch}
+.options{display:flex;flex-direction:column;gap:8px}
+.opt{text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 14px;display:flex;flex-direction:column;gap:6px}
+.opt:hover:not(:disabled){border-color:var(--jade)}
+.opt:disabled{cursor:default}
+.opt .ofb{font-size:.86rem;border-top:1px dashed var(--line);padding-top:6px}
+.opt.wrong{border-color:var(--bad);background:var(--bad-soft)}
+.opt.right{border-color:var(--ok);background:var(--ok-soft)}
+.opt .tag{font-size:.72rem;font-weight:700;letter-spacing:.08em}
+.opt.wrong .tag{color:var(--bad)} .opt.right .tag{color:var(--ok)}
+.visual{border:1px solid var(--line);border-radius:10px;overflow:hidden;max-width:560px}
+.visual .cap{font-size:.75rem;color:var(--muted);background:var(--sunk);padding:4px 12px;display:flex;flex-wrap:wrap;gap:4px 12px}
+.visual .tbl-wrap{border:none;border-radius:0}
+td.qm{background:var(--amber-soft);color:var(--amber);font-weight:700;text-align:right;font-family:var(--f-mono)}
+td.rv{background:var(--ok-soft);color:var(--ok);font-weight:700;text-align:right;font-family:var(--f-mono)}
+tr.tot td{font-weight:700;border-top:2px solid var(--line)}
+.model{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:.82rem}
+.model span{font-family:var(--f-mono);padding:4px 10px;border-radius:8px;background:var(--sunk)}
+.model span.f{background:var(--jade-soft);color:var(--jade);font-weight:600}
+.model i{font-style:normal;color:var(--muted)}
+.task{display:flex;flex-direction:column;gap:10px;border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.task.done{border-color:var(--ok)}
+.task h3{display:flex;gap:10px;align-items:baseline}
+.task h3 small{font-family:var(--f-mono);font-size:.75rem;color:var(--muted);font-weight:400}
+.verify{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
+.verify label{display:flex;flex-direction:column;gap:4px;font-size:.88rem}
+.verify input{font-family:var(--f-mono)}
+.verify .r{font-size:.8rem;min-height:1.3em}
+.verify .r.ok{color:var(--ok)} .verify .r.no{color:var(--bad)}
+.note{border-left:3px solid var(--amber);background:var(--amber-soft);padding:8px 14px;border-radius:0 8px 8px 0;font-size:.92rem}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <h1>分析師養成記</h1><span class="sub">Power BI 篇 · 先懂觀念，再動手做儀表板</span>
+  <span id="nav"></span>
+</div></header>
+<div class="wrap">
+  <section class="card">
+    <span class="eyebrow">學習進度</span>
+    <div class="score" id="score"></div>
+    <p class="lead">Power BI 沒辦法在網頁裡操作，所以這一篇分成兩半：前三個分頁用題目練習最容易卡關的觀念，題目裡的數字都來自拾光茶飲的真實資料；最後一個分頁給你資料檔和任務，在自己電腦的 Power BI Desktop 動手做，再回來對答案。</p>
+    <div class="tabs" role="tablist" id="tabs"></div>
+  </section>
+  <div id="view" style="display:flex;flex-direction:column;gap:16px"></div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-asm.js"></script>
+<script src="./common.js"></script>
+<script>
+$('#nav').outerHTML=siteNav('Power BI 篇');
+const J='FROM orders o JOIN order_items oi ON oi.order_id=o.order_id';
+const REV='SUM(oi.qty*oi.unit_price)';
+const n=x=>x==null?'':Math.round(x).toLocaleString('en-US');
+const MODEL=`<div class="model"><span>stores</span><i>1 → 多</i><span class="f">orders</span><i>1 → 多</i><span class="f">order_items</span><i>多 ← 1</i><span>products</span></div>
+<div class="model" style="margin-top:6px"><span>customers</span><i>1 → 多</i><span class="f">orders</span><i>多 ← 1</i><span>dates</span></div>`;
+const M_REV='Revenue = SUMX(order_items, order_items[qty] * order_items[unit_price])';
+
+const QS=[
+ /* ---------- data model ---------- */
+ {id:'m1',sec:'model',title:'事實表與維度表',prompt:'Power BI 的資料模型把資料表分成「事實表」（記錄發生的事件，列數多、會一直增加）和「維度表」（描述人、事、物，列數少）。拾光茶飲的資料中，哪一組是事實表？',
+  options:[
+   {t:'stores、products、customers',fb:'這三張是維度表：描述門市、品項、會員是誰，列數少，也不常變動。'},
+   {t:'orders、order_items',ok:true,fb:'每一筆訂單、每一列明細都是一個「發生的事件」，會隨時間不斷增加。營收、杯數這些要加總的數字都在事實表裡。'},
+   {t:'全部都是事實表',fb:'如果不區分，篩選和計算會變得很混亂。星狀結構的重點就是把兩者分開。'},
+   {t:'coupons、stores',fb:'這兩張都是描述性質的維度表。'}]},
+ {id:'m2',sec:'model',title:'關聯的方向',prompt:'你在模型檢視把 <code>stores[store_id]</code> 拉到 <code>orders[store_id]</code> 建立關聯。這個關聯的基數（cardinality）是什麼？',
+  options:[
+   {t:'一對一',fb:'一家門市會有很多筆訂單，不是一對一。'},
+   {t:'多對多',fb:'多對多會讓篩選結果難以預期，應盡量避免。這裡每筆訂單只屬於一家門市。'},
+   {t:'一對多：stores 是「一」，orders 是「多」',ok:true,fb:'維度表在「一」那端，事實表在「多」那端。篩選會從「一」流向「多」：選了某家門市，訂單就跟著被篩選。'},
+   {t:'一對多：orders 是「一」，stores 是「多」',fb:'方向反了。store_id 在 stores 裡不重複，在 orders 裡會重複出現很多次。'}]},
+ {id:'m3',sec:'model',title:'為什麼要有日期表',prompt:'orders 已經有 order_date 欄位了，為什麼大家還是建議另外做一張 <code>dates</code> 日期表？',
+  options:[
+   {t:'因為 Power BI 不能讀取日期欄位',fb:'可以讀。問題不在讀取，而在時間計算。'},
+   {t:'為了讓檔案變大、看起來比較專業',fb:'日期表很小，目的是讓時間計算正確。'},
+   {t:'只是個人習慣，沒有實際差別',fb:'差別很大：沒有完整日期表，上月、去年同期這類計算常會出錯。'},
+   {t:'時間智慧函數（上個月、去年同期、年初至今）需要一張日期連續不中斷的表；也方便統一放月份、星期、是否週末等欄位',ok:true,fb:'DATEADD、SAMEPERIODLASTYEAR、TOTALYTD 都假設日期表是連續的。記得在 Power BI 把它「標記為日期資料表」。'}]},
+ {id:'m4',sec:'model',title:'計算欄與量值',prompt:'你需要兩個東西：(A) 每一列明細的金額 = qty × unit_price；(B) 會隨著篩選器變動的「總營收」。該怎麼做？',
+  options:[
+   {t:'兩個都做成計算欄',fb:'計算欄在資料重新整理時就算好、存進每一列，不會隨報表上的篩選器重新計算，不適合做總營收。'},
+   {t:'(A) 做成計算欄，(B) 做成量值',ok:true,fb:'計算欄是「逐列」算好存起來；量值是「依照當下的篩選條件」即時計算。會放進卡片、圖表數值區的彙總數字，都應該是量值。'},
+   {t:'(A) 做成量值，(B) 做成計算欄',fb:'剛好相反。量值沒有「目前這一列」的概念，計算欄不會回應篩選器。'},
+   {t:'兩個都不用做，直接把欄位拖進圖表就好',fb:'資料裡沒有金額欄位，一定要自己算。而且依賴自動加總（隱含量值）不利於之後重複使用。'}]},
+
+ /* ---------- DAX ---------- */
+ {id:'d1',sec:'dax',title:'SUM 還是 SUMX',prompt:'營收 = 每一列的 qty × unit_price 加總。下面哪個量值是對的？',dax:null,
+  options:[
+   {t:'<code>Revenue = SUM(order_items[qty]) * SUM(order_items[unit_price])</code>',fb:'這會先把所有杯數加總、所有單價加總，再相乘，得到一個天文數字。'},
+   {t:'<code>Revenue = SUM(order_items[qty] * order_items[unit_price])</code>',fb:'SUM 只能放單一欄位，不能放運算式，這行會報錯。'},
+   {t:'<code>Revenue = SUMX(order_items, order_items[qty] * order_items[unit_price])</code>',ok:true,fb:'SUMX 會逐列算出 qty × unit_price，再把結果加總。名字結尾有 X 的函數都是這種「逐列計算再彙總」的迭代函數。'},
+   {t:'<code>Revenue = order_items[qty] * order_items[unit_price]</code>',fb:'這是計算欄的寫法。量值沒有「目前這一列」，會報錯。'}]},
+ {id:'d2',sec:'dax',title:'篩選內容：每個儲存格各算各的',prompt:'報表上有一個月份篩選器選了 2026-10，矩陣的列是門市。台中勤美店那一格會顯示多少？',dax:M_REV,
+  build:h=>{
+   const rows=h.rows(`SELECT s.name, ${REV} ${J} JOIN stores s ON s.store_id=o.store_id WHERE substr(o.order_date,1,7)='2026-10' GROUP BY s.store_id ORDER BY s.store_id`);
+   const tcOct=rows.find(r=>r[0]==='台中勤美店')[1], tcAll=h.v(`SELECT ${REV} ${J} WHERE o.store_id=3`), octAll=rows.reduce((a,r)=>a+r[1],0), all=h.v(`SELECT ${REV} ${J}`);
+   return {visual:{cap:['篩選器：dates[month] = 2026-10','列：stores[name]','值：[Revenue]'],cols:['name','Revenue'],rows:rows.map(r=>[r[0],n(r[1])]),mark:[2,1]},
+    options:[
+     {t:n(tcAll),fb:'這是台中店 7–10 月的總營收，忽略了月份篩選器。篩選器會影響頁面上每一個儲存格。'},
+     {t:n(octAll),fb:'這是 10 月全公司的營收，忽略了「台中勤美店」這一列本身也是一個篩選條件。'},
+     {t:n(tcOct),ok:true,fb:'每個儲存格都有自己的「篩選內容」：這一格同時受到篩選器（10 月）和所在的列（台中勤美店）影響。量值會在這個組合下重新計算一次。'},
+     {t:n(all),fb:'這是完全沒有篩選的總營收。'}]}}},
+ {id:'d3',sec:'dax',title:'CALCULATE 會覆蓋篩選',prompt:'矩陣的列是通路。「門市」那一列的 Delivery Revenue 會顯示什麼？',dax:M_REV+'\n\nDelivery Revenue = CALCULATE([Revenue], orders[channel] = "外送")',
+  build:h=>{
+   const rows=h.rows(`SELECT o.channel, ${REV} ${J} GROUP BY o.channel ORDER BY 2 DESC`);
+   const get=c=>rows.find(r=>r[0]===c)[1], del=get('外送'), sto=get('門市'), all=rows.reduce((a,r)=>a+r[1],0);
+   return {visual:{cap:['列：orders[channel]','值：[Revenue]、[Delivery Revenue]'],cols:['channel','Revenue','Delivery Revenue'],rows:rows.map(r=>[r[0],n(r[1]),r[0]==='外送'?n(del):r[0]==='門市'?'':'…']),mark:[rows.findIndex(r=>r[0]==='門市'),2]},
+    options:[
+     {t:'空白，因為門市的訂單不是外送',fb:'很多人這樣想，但 CALCULATE 裡的條件不是「再加一層」篩選，而是直接取代同一欄位上原本的篩選。'},
+     {t:n(del)+'（和外送那一列一樣）',ok:true,fb:'CALCULATE 的篩選條件會「取代」channel 欄位原本的篩選。所以不管在哪一列，channel 都被改成「外送」，每一列都顯示外送營收。想保留原本的列篩選，要用 KEEPFILTERS。'},
+     {t:n(sto)+'（門市自己的營收）',fb:'那是 [Revenue] 的值。Delivery Revenue 把 channel 篩選改掉了。'},
+     {t:n(all)+'（全部通路的總營收）',fb:'CALCULATE 並沒有移除篩選，而是把它換成「外送」。'}]}}},
+ {id:'d4',sec:'dax',title:'用 ALL 算占比',prompt:'矩陣的列是門市。台北信義店的 Share 會顯示多少？',dax:M_REV+'\n\nShare = DIVIDE([Revenue], CALCULATE([Revenue], ALL(stores)))',
+  build:h=>{
+   const rows=h.rows(`SELECT s.name, ${REV} ${J} JOIN stores s ON s.store_id=o.store_id GROUP BY s.store_id ORDER BY 2 DESC`);
+   const all=rows.reduce((a,r)=>a+r[1],0), xy=rows.find(r=>r[0]==='台北信義店')[1], tp=xy+rows.find(r=>r[0]==='台北中山店')[1];
+   const p=x=>(x*100).toFixed(1)+'%';
+   return {visual:{cap:['列：stores[name]','值：[Revenue]、[Share]'],cols:['name','Revenue','Share'],rows:rows.map(r=>[r[0],n(r[1]),r[0]==='台北信義店'?'':'…']),mark:[rows.findIndex(r=>r[0]==='台北信義店'),2]},
+    options:[
+     {t:p(xy/all),ok:true,fb:'ALL(stores) 會移除門市的篩選，所以分母是全公司營收；分子仍然受「台北信義店」這一列篩選。這是計算占比的標準寫法。'},
+     {t:'100.0%',fb:'如果沒有 ALL，分子和分母都只算信義店，才會是 100%。ALL 的作用就是讓分母看到所有門市。'},
+     {t:p(xy/tp),fb:'這是信義店占台北兩家店的比例。ALL(stores) 移除的是整張 stores 表的篩選，不只是同城市。'},
+     {t:'20.0%',fb:'五家店平均各占 20%，但實際占比要看各店營收。'}]}}},
+ {id:'d5',sec:'dax',title:'總計不是各列相加',prompt:'矩陣的列是門市，量值是不重複會員數。最下面「總計」那一列會顯示多少？',dax:'Members = DISTINCTCOUNTNOBLANK(orders[customer_id])',
+  build:h=>{
+   const rows=h.rows(`SELECT s.name, COUNT(DISTINCT o.customer_id) FROM orders o JOIN stores s ON s.store_id=o.store_id GROUP BY s.store_id ORDER BY s.store_id`);
+   const sum=rows.reduce((a,r)=>a+r[1],0), tot=h.v('SELECT COUNT(DISTINCT customer_id) FROM orders'), cust=h.v('SELECT COUNT(*) FROM customers');
+   return {visual:{cap:['列：stores[name]','值：[Members]'],cols:['name','Members'],rows:[...rows.map(r=>[r[0],n(r[1])]),['總計','']],mark:[rows.length,1],total:true},
+    options:[
+     {t:n(sum)+'（各門市相加）',fb:'同一位會員可能去過好幾家店，相加會重複計算。Power BI 的總計列不是把上面的數字加起來。'},
+     {t:n(cust)+'（customers 表的總人數）',fb:'量值算的是「有訂單的會員」，不是所有註冊會員。'},
+     {t:n(tot),ok:true,fb:'總計列是「沒有門市篩選」的情況下重新計算一次量值，所以是全公司不重複的會員數。不重複計數、平均、比率這類量值，總計都不等於各列相加。'},
+     {t:n(Math.round(sum/rows.length))+'（各門市平均）',fb:'總計列不會自動取平均，它是在沒有門市篩選的情況下重新計算。'}]}}},
+ {id:'d6',sec:'dax',title:'篩選傳不過去的方向',prompt:'你想知道各類別分別有多少筆訂單，於是把 products[category] 放在列。鮮奶茶那一列會顯示多少？',dax:'Orders = COUNTROWS(orders)',model:true,
+  build:h=>{
+   const cats=h.rows('SELECT category FROM products GROUP BY category ORDER BY MIN(product_id)').map(r=>r[0]);
+   const all=h.v('SELECT COUNT(*) FROM orders'), milkO=h.v("SELECT COUNT(DISTINCT oi.order_id) FROM order_items oi JOIN products p ON p.product_id=oi.product_id WHERE p.category='鮮奶茶'"), milkL=h.v("SELECT COUNT(*) FROM order_items oi JOIN products p ON p.product_id=oi.product_id WHERE p.category='鮮奶茶'");
+   return {visual:{cap:['列：products[category]','值：[Orders]'],cols:['category','Orders'],rows:cats.map(c=>[c,c==='鮮奶茶'?'':'…']),mark:[cats.indexOf('鮮奶茶'),1]},
+    options:[
+     {t:n(milkO)+'（有買鮮奶茶的訂單數）',fb:'這是你想要的答案，但這個量值算不出來。篩選從 products 傳到 order_items 之後，沒辦法「逆流」回到 orders。'},
+     {t:n(milkL)+'（鮮奶茶的明細列數）',fb:'量值數的是 orders 的列數，不是 order_items。'},
+     {t:'空白',fb:'不會空白。orders 沒有被篩選到，所以會顯示全部的列數。'},
+     {t:n(all)+'（每一列都顯示全部訂單數）',ok:true,fb:'篩選只會從「一」流向「多」：products → order_items。但 orders 在 order_items 的「一」那端，篩選傳不上去，所以每個類別都顯示全部訂單數。解法是改數明細表：DISTINCTCOUNT(order_items[order_id])。看到每一列數字都一樣，通常就是這個問題。'}]}}},
+ {id:'d7',sec:'dax',title:'時間智慧：上個月',prompt:'矩陣的列是月份。2026-10 那一列的 Prev Month Revenue 會顯示多少？',dax:M_REV+'\n\nPrev Month Revenue = CALCULATE([Revenue], DATEADD(dates[date], -1, MONTH))',
+  build:h=>{
+   const rows=h.rows(`SELECT substr(o.order_date,1,7) m, ${REV} ${J} GROUP BY m ORDER BY m`);
+   return {visual:{cap:['列：dates[month]','值：[Revenue]、[Prev Month Revenue]'],cols:['month','Revenue','Prev Month Revenue'],rows:rows.map((r,i)=>[r[0],n(r[1]),i===0?'（空白）':i===3?'':'…']),mark:[3,2]},
+    options:[
+     {t:n(rows[3][1])+'（10 月營收）',fb:'那是 [Revenue] 本身。DATEADD 把日期範圍往前移了一個月。'},
+     {t:n(rows[2][1])+'（9 月營收）',ok:true,fb:'DATEADD 把目前的日期範圍（10 月）整個往前移一個月，所以算出 9 月營收。有了它，月增率就是 DIVIDE([Revenue] - [Prev Month Revenue], [Prev Month Revenue])。7 月那一列因為沒有 6 月資料，會是空白。'},
+     {t:n(rows[1][1])+'（8 月營收）',fb:'-1 個月是往前一個月，不是兩個月。'},
+     {t:'空白',fb:'只有 7 月那一列會是空白，因為資料沒有 6 月。'}]}}},
+
+ /* ---------- visuals ---------- */
+ {id:'v1',sec:'viz',title:'趨勢',prompt:'區經理想看 7–10 月每個月的營收變化。該用哪種視覺效果？',
+  options:[
+   {t:'圓餅圖',fb:'圓餅圖看的是「占比」，看不出隨時間的變化方向。'},
+   {t:'折線圖，X 軸放月份',ok:true,fb:'有時間順序的資料用折線圖。線的斜率讓人一眼看出上升或下降。'},
+   {t:'卡片',fb:'卡片只能顯示一個數字，看不到變化。'},
+   {t:'樹狀圖',fb:'樹狀圖用面積比較大小，沒有時間順序。'}]},
+ {id:'v2',sec:'viz',title:'比較',prompt:'要比較 5 家門市的營收高低，哪種做法最好讀？',
+  options:[
+   {t:'橫條圖，依營收由高到低排序',ok:true,fb:'比較類別大小用長條。橫條讓中文店名好讀，排序後誰高誰低一目了然。'},
+   {t:'折線圖，X 軸放門市',fb:'門市之間沒有先後順序，連成線會暗示一個不存在的趨勢。'},
+   {t:'圓餅圖',fb:'人眼不擅長比較角度，營收接近的門市很難分出高低。'},
+   {t:'用 5 張卡片各顯示一家店',fb:'讀者得自己比數字，圖表的價值就是幫人省掉這一步。'}]},
+ {id:'v3',sec:'viz',title:'太多類別',prompt:'行銷想看 12 個品項各占多少銷量。同事做了一個 12 塊的圓餅圖，你會怎麼建議？',
+  options:[
+   {t:'很好，顏色越多越豐富',fb:'12 種顏色要對照圖例才看得懂，小塊幾乎看不出差別。'},
+   {t:'改成 3D 圓餅圖',fb:'3D 會扭曲面積，更難比較。'},
+   {t:'改成排序的橫條圖；或只顯示前 5 名，其餘合併成「其他」',ok:true,fb:'圓餅圖適合 2 到 4 個類別。類別一多就改用排序的橫條圖，或合併長尾。'},
+   {t:'把圓餅圖放大',fb:'問題不在大小，而在類別太多、角度難以比較。'}]},
+ {id:'v4',sec:'viz',title:'儀表板版面',prompt:'你要做一頁給營運經理每天早上看的儀表板。哪種安排最好？',
+  options:[
+   {t:'把所有做得出來的圖表都放上去，越完整越好',fb:'資訊太多等於沒有重點。一頁儀表板應該回答一個主要問題。'},
+   {t:'最上方放明細表，方便查每一筆訂單',fb:'明細適合放在鑽研頁。首頁要先給結論。'},
+   {t:'每張圖用不同色系，讓畫面活潑',fb:'顏色應該有意義，例如同一家門市在每張圖都用同一個顏色。隨意換色會增加閱讀負擔。'},
+   {t:'左上放 3 到 4 張關鍵數字卡片，中間放趨勢圖和門市比較，篩選器集中在同一側，全頁配色一致',ok:true,fb:'視線從左上開始：先看關鍵數字，再看趨勢與比較，需要時再篩選。這是最常見也最好讀的版面。'}]}
+];
+const SECS={model:['資料模型','Power BI 最常出錯的地方不是公式，而是模型。模型對了，公式通常很簡單。'],dax:['DAX 與篩選內容','DAX 最重要的觀念是「篩選內容」：同一個量值，在不同的儲存格會算出不同的數字。下面每一題的數字都是用拾光茶飲的資料算出來的。'],viz:['圖表與儀表板','選對圖表，讓人 5 秒內看懂一件事。']};
+const TASKS=[
+ {t:'安裝並匯入資料',d:['安裝免費的 Power BI Desktop（Microsoft Store 搜尋 Power BI Desktop，只支援 Windows）。','按下方按鈕下載 8 個 CSV，放在同一個資料夾。','「取得資料」→「文字/CSV」，逐一匯入 8 個檔案。','在資料檢視確認 orders[order_date] 和 dates[date] 的資料類型是「日期」。']},
+ {t:'建立資料模型',d:['切到模型檢視，建立關聯：stores → orders、customers → orders、orders → order_items、products → order_items、dates[date] → orders[order_date]。','確認每條關聯都是一對多，維度表在「一」那端。','在 dates 表上按右鍵，「標記為日期資料表」，日期欄選 date。']},
+ {t:'建立量值',d:['Revenue = SUMX(order_items, order_items[qty] * order_items[unit_price])','Orders = COUNTROWS(orders)','AOV = DIVIDE([Revenue], [Orders])','Members = DISTINCTCOUNTNOBLANK(orders[customer_id])','Prev Month Revenue = CALCULATE([Revenue], DATEADD(dates[date], -1, MONTH))'],verify:true},
+ {t:'做一頁營運儀表板',d:['左上放 4 張卡片：Revenue、Orders、AOV、Members。','折線圖：X 軸 dates[month]，Y 軸 Revenue。','橫條圖：Y 軸 stores[name]，X 軸 Revenue，由高到低排序。','加兩個篩選器（交叉分析篩選器）：orders[channel]、dates[month]。','點一下橫條圖的「台中勤美店」，觀察其他圖表怎麼跟著變。']},
+ {t:'放進作品集',d:['把儀表板截圖，並把 .pbix 檔案放進你的 GitHub repo。','在 README 寫三件事：這頁儀表板回答什麼問題、你建了哪些量值、從中看到的一個發現（例如台中店 10 月的下滑）。','進階：加一頁「台中店下滑原因」的鑽研頁，放品項的矩陣和 9、10 月比較。']}
+];
+const KEY='analyst-quest-powerbi-v1';
+const S=loadState(KEY,{tab:'model',picked:{},tasks:{},ver:{}});
+const save=()=>saveState(KEY,S);
+let db=null, BUILT={}, VER=[];
+const h={v:q=>{const r=db.exec(q);return r.length?r[0].values[0][0]:null},rows:q=>{const r=db.exec(q);return r.length?r[0].values:[]}};
+const opts=q=>q.build?(BUILT[q.id]?BUILT[q.id].options:null):q.options;
+const solvedQ=q=>{const o=opts(q);return !!o&&(S.picked[q.id]||[]).some(k=>o[k]&&o[k].ok)};
+const firstTry=q=>{const o=opts(q),p=S.picked[q.id]||[];return !!o&&p.length>0&&o[p[0]]&&o[p[0]].ok};
+
+function renderScore(){
+  const cnt=sec=>{const qs=QS.filter(q=>q.sec===sec);return qs.filter(solvedQ).length+'/'+qs.length};
+  const ft=QS.filter(firstTry).length, done=QS.filter(solvedQ).length;
+  $('#score').innerHTML=`<div><b>${cnt('model')}</b><span>資料模型</span></div><div><b>${cnt('dax')}</b><span>DAX 與篩選內容</span></div><div><b>${cnt('viz')}</b><span>圖表與儀表板</span></div><div><b>${done?Math.round(ft/done*100)+'%':'–'}</b><span>第一次就答對的比例</span></div><div><b>${TASKS.filter((_,i)=>S.tasks[i]).length}/${TASKS.length}</b><span>實作任務完成</span></div>`;
+  const tabs=[['model','資料模型'],['dax','DAX 與篩選內容'],['viz','圖表與儀表板'],['hands','動手做儀表板']];
+  $('#tabs').innerHTML=tabs.map(([k,t])=>`<button role="tab" aria-selected="${S.tab===k}" data-t="${k}" type="button">${t}</button>`).join('');
+  $('#tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.t;save();render();});
+}
+function visualHTML(v,solved,answer){
+  return `<div class="visual"><div class="cap">${v.cap.map(c=>`<span>${esc(c)}</span>`).join('')}</div><div class="tbl-wrap"><table><thead><tr>${v.cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${v.rows.map((r,i)=>`<tr class="${v.total&&i===v.rows.length-1?'tot':''}">${r.map((c,j)=>i===v.mark[0]&&j===v.mark[1]?(solved?`<td class="rv">${esc(answer)}</td>`:'<td class="qm">？</td>'):`<td class="${j>0?'num':''}">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`;
+}
+function qHTML(q,i){
+  const o=opts(q), picked=S.picked[q.id]||[], done=solvedQ(q), b=BUILT[q.id];
+  const ans=o?(o.find(x=>x.ok).t.replace(/（.*$/,'')):'';
+  return `<section class="card" id="q-${q.id}">
+    <div class="row"><span class="chip">第 ${i+1} 題</span><h3>${q.title}</h3><span class="spacer"></span>${done?`<span class="chip ${firstTry(q)?'ok':'amber'}">${firstTry(q)?'一次答對':'已答對'}</span>`:''}</div>
+    ${q.model?MODEL:''}
+    ${q.dax?`<pre class="sol">${esc(q.dax)}</pre>`:''}
+    <p class="q-prompt">${q.prompt}</p>
+    ${q.build?(b?visualHTML(b.visual,done,ans):'<p class="meta">正在用資料計算這一題的數字…</p>'):''}
+    ${o?`<div class="options">${o.map((x,k)=>{const p=picked.includes(k);return `<button class="opt ${p?(x.ok?'right':'wrong'):''}" data-k="${k}" type="button" ${done||p?'disabled':''}>${p?`<span class="tag">${x.ok?'正確':'再想想'}</span>`:''}<span>${x.t}</span>${p?`<span class="ofb">${x.fb}</span>`:''}</button>`}).join('')}</div>`:''}
+  </section>`;
+}
+function wireQ(q,i){
+  const el=$('#q-'+q.id); if(!el)return;
+  el.querySelectorAll('.opt').forEach(b=>b.onclick=()=>{
+    S.picked[q.id]=[...(S.picked[q.id]||[]),+b.dataset.k]; save();
+    el.outerHTML=qHTML(q,i); wireQ(q,i); renderScore();
+  });
+}
+function render(){
+  renderScore();
+  const v=$('#view');
+  if(S.tab==='hands'){renderHands();return}
+  const qs=QS.filter(q=>q.sec===S.tab), [t,lead]=SECS[S.tab];
+  v.innerHTML=`<section class="card"><h2>${t}</h2><p class="lead">${lead}</p>${S.tab==='dax'?`<div><span class="eyebrow">這幾題共用的資料模型</span><div style="margin-top:8px">${MODEL}</div><p class="meta" style="margin-top:6px">箭頭是篩選流動的方向：從「一」流向「多」。綠色是事實表。</p></div>`:''}</section>`+qs.map(qHTML).join('');
+  qs.forEach(wireQ);
+}
+function renderHands(){
+  const v=$('#view');
+  v.innerHTML=`<section class="card"><h2>動手做儀表板</h2>
+    <p class="lead">在自己電腦的 Power BI Desktop 完成下面 5 個任務。做完第 3 步後，把儀表板上看到的數字填回來，馬上知道模型和量值有沒有做對。</p>
+    <div class="row"><button class="btn primary" id="dl" type="button" ${db?'':'disabled'}>${db?'下載資料 CSV（8 個檔案）':'資料準備中…'}</button><span class="meta">包含 7 張資料表和 1 張 dates 日期表。瀏覽器如果詢問是否允許下載多個檔案，請選允許。</span></div>
+  </section>`+TASKS.map((t,i)=>`<section class="task ${S.tasks[i]?'done':''}" id="t-${i}">
+      <h3><small>任務 ${i+1}</small>${t.t}</h3>
+      <ul class="plain">${t.d.map(x=>`<li>${/=/.test(x)&&i===2?`<code>${esc(x)}</code>`:esc(x)}</li>`).join('')}</ul>
+      ${t.verify?`<div><span class="eyebrow amber">對答案：把你的儀表板顯示的數字填進來</span><div class="verify" style="margin-top:8px">${VER.length?VER.map((x,k)=>`<label for="ver-${k}">${x.q}<input type="text" id="ver-${k}" data-k="${k}" inputmode="decimal" value="${esc(S.ver[k]||'')}" autocomplete="off"><span class="r" id="vr-${k}"></span></label>`).join(''):'<p class="meta">資料準備中…</p>'}</div></div>`:''}
+      <div class="checks"><label><input type="checkbox" id="tk-${i}" data-i="${i}" ${S.tasks[i]?'checked':''}><span>我完成了這個任務</span></label></div>
+    </section>`).join('');
+  v.querySelectorAll('.checks input').forEach(x=>x.onchange=()=>{S.tasks[+x.dataset.i]=x.checked;save();$('#t-'+x.dataset.i).classList.toggle('done',x.checked);renderScore()});
+  const show=k=>{const el=$('#vr-'+k), raw=(S.ver[k]||'').replace(/[,\sNT$元]/g,''); if(!el)return; if(!raw){el.textContent='';el.className='r';return}
+    const x=parseFloat(raw), e=VER[k].a, ok=isFinite(x)&&Math.abs(x-e)<=Math.max(VER[k].tol||0,Math.abs(e)*0.002);
+    el.textContent=ok?'正確':VER[k].hint; el.className='r '+(ok?'ok':'no')};
+  v.querySelectorAll('.verify input').forEach(x=>{x.oninput=()=>{S.ver[+x.dataset.k]=x.value;save();show(+x.dataset.k)};show(+x.dataset.k)});
+  const dl=$('#dl'); if(dl)dl.onclick=downloadAll;
+}
+async function downloadAll(){
+  if(!db)return;
+  const cell=v=>v===null?'':/[",\n]/.test(String(v))?'"'+String(v).replace(/"/g,'""')+'"':String(v);
+  const csv=(cols,rows)=>'﻿'+[cols.join(','),...rows.map(x=>x.map(cell).join(','))].join('\n');
+  for(const t of Object.keys(TABLES)){const r=db.exec(`SELECT * FROM ${t}`)[0];downloadText(t+'.csv',csv(r.columns,r.values),'text/csv;charset=utf-8');await new Promise(z=>setTimeout(z,350))}
+  const WD=['日','一','二','三','四','五','六'], rows=[];
+  for(let d=0;d<123;d++){const dt=new Date(Date.UTC(2026,6,1)+d*864e5), iso=dt.toISOString().slice(0,10), w=dt.getUTCDay();rows.push([iso,dt.getUTCFullYear(),dt.getUTCMonth()+1,iso.slice(0,7),'星期'+WD[w],(w===0||w===6)?'週末':'平日'])}
+  downloadText('dates.csv',csv(['date','year','month_no','month','weekday','day_type'],rows),'text/csv;charset=utf-8');
+  toast('8 個 CSV 已下載');
+}
+render();
+openDB().then(d=>{
+  db=d;
+  QS.filter(q=>q.build).forEach(q=>BUILT[q.id]=q.build(h));
+  const rev=h.v(`SELECT ${REV} ${J}`), ord=h.v('SELECT COUNT(*) FROM orders');
+  VER=[
+   {q:'Revenue 卡片（沒有任何篩選）',a:rev,hint:'不對。檢查 Revenue 是不是用 SUMX，以及 order_items 是否完整匯入。'},
+   {q:'Orders 卡片（沒有任何篩選）',a:ord,hint:'不對。Orders 應該是 orders 表的列數。'},
+   {q:'AOV 卡片，篩選器選「外送」（四捨五入到整數）',a:h.v(`SELECT ${REV}*1.0/COUNT(DISTINCT o.order_id) ${J} WHERE o.channel='外送'`),tol:1,hint:'不對。如果數字沒有跟著篩選器變，檢查 orders → order_items 的關聯。'},
+   {q:'Revenue：篩選「台中勤美店」和 2026-10',a:h.v(`SELECT ${REV} ${J} WHERE o.store_id=3 AND substr(o.order_date,1,7)='2026-10'`),hint:'不對。檢查 stores → orders 和 dates → orders 兩條關聯，以及 order_date 的資料類型。'},
+   {q:'Members 卡片（沒有任何篩選）',a:h.v('SELECT COUNT(DISTINCT customer_id) FROM orders'),hint:'不對。多 1 的話，是用了 DISTINCTCOUNT 把空白也算成一位，改用 DISTINCTCOUNTNOBLANK。'}
+  ];
+  render();
+}).catch(e=>{$('#view').insertAdjacentHTML('afterbegin',`<div class="fb bad">資料準備失敗：${esc(e.message||e)}。請重新整理頁面。</div>`)});
+</script>
+</body>
+</html>
