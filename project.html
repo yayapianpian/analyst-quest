@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>分析師養成記 結業專案</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="./common.css">
+<style>
+.stepno{font-family:var(--f-mono);font-size:.75rem;color:var(--muted)}
+.ev{border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.ev .tbl-wrap{max-height:200px}
+.preview{white-space:pre-wrap;word-break:break-word;max-height:420px;overflow:auto;background:var(--sunk);border-radius:10px;padding:14px;font-family:var(--f-mono);font-size:.8rem;margin:0}
+.progress{font-size:.85rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <h1>分析師養成記</h1><span class="sub">結業專案 · 做出一份能放進作品集的分析報告</span>
+  <span id="nav"></span>
+</div></header>
+
+<div class="wrap">
+  <section class="card">
+    <span class="eyebrow">這一頁在做什麼</span>
+    <h2>沒有標準答案的任務</h2>
+    <p class="lead">真實工作不會告訴你要查哪張表、算哪個數字。這裡只給你一句主管的話，由你決定要分析什麼、怎麼下結論。完成後可以匯出一份 README 和資料檔，直接放上 GitHub 當作品集。</p>
+    <p class="progress" id="progress"></p>
+  </section>
+
+  <section class="card">
+    <span class="stepno">步驟 1</span><h2>選一個題目</h2>
+    <div class="grid" id="briefs"></div>
+    <div class="msg"><div class="avatar" id="b-av" aria-hidden="true"></div><div class="bubble" id="b-msg"></div></div>
+    <details class="box"><summary>卡住了？看看可以從哪些方向切入</summary><ul class="plain" id="b-guide"></ul><p class="meta" style="margin-top:8px">這些只是方向，不是答案。你也可以完全照自己的想法做。</p></details>
+  </section>
+
+  <section class="card">
+    <span class="stepno">步驟 2</span><h2>探索資料</h2>
+    <p class="lead">自由寫 SQL 查詢。查到有用的結果，就在下面寫一句「這個結果說明了什麼」，再加入報告。</p>
+    <details class="box"><summary>資料表與欄位</summary><div class="schema-mini" id="schema"></div></details>
+    <label class="sr" for="sql">SQL 編輯器</label>
+    <textarea class="code" id="sql" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="-- 在這裡寫 SQL，Ctrl + Enter 執行"></textarea>
+    <div class="row"><button class="btn primary" id="run" type="button" disabled>資料庫建立中…</button><span class="kbd">Ctrl / ⌘ + Enter</span></div>
+    <div id="result"></div>
+    <div id="addbox" hidden>
+      <label class="fld" for="ev-note">這個結果說明了什麼？<small>寫成一句有數字的發現，例如「新竹店 10 月營收比 7 月成長 55%，是唯一連續成長的門市」。</small>
+      <textarea id="ev-note" style="min-height:70px"></textarea></label>
+      <div class="row" style="margin-top:8px"><button class="btn" id="add" type="button">把這個發現加入報告</button></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <span class="stepno">步驟 3</span><h2>你的發現</h2>
+    <div id="evlist"></div>
+  </section>
+
+  <section class="card">
+    <span class="stepno">步驟 4</span><h2>寫報告</h2>
+    <label class="fld" for="r-summary">結論與建議<small>放最前面。先講你的建議（做、不做，或先小規模測試），再用一兩個關鍵數字支撐。</small><textarea id="r-summary"></textarea></label>
+    <label class="fld" for="r-problem">問題定義<small>主管那句話很模糊。你把它改寫成哪幾個可以用資料回答的問題？做了哪些假設？</small><textarea id="r-problem"></textarea></label>
+    <label class="fld" for="r-method">分析方法<small>用了哪些資料表、怎麼計算、跟什麼基準比較。</small><textarea id="r-method"></textarea></label>
+    <label class="fld" for="r-limits">限制與下一步<small>這份資料回答不了什麼？還需要哪些資料？你會怎麼驗證你的建議？</small><textarea id="r-limits"></textarea></label>
+    <div>
+      <span class="eyebrow amber">交出去之前，自己檢查一次</span>
+      <div class="checks" id="rubric" style="margin-top:8px"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <span class="stepno">步驟 5</span><h2>匯出作品集</h2>
+    <p class="lead">下面是自動產生的 README。把它和資料檔放進一個新的 GitHub repo，就是一個完整的作品集專案。</p>
+    <pre class="preview" id="preview"></pre>
+    <div class="row">
+      <button class="btn primary" id="dl-md" type="button">下載 README.md</button>
+      <button class="btn" id="cp-md" type="button">複製內容</button>
+      <button class="btn" id="dl-sql" type="button">下載 queries.sql</button>
+      <button class="btn" id="dl-csv" type="button" disabled>下載資料 CSV（7 個檔案）</button>
+    </div>
+    <details class="box"><summary>怎麼放上 GitHub</summary>
+      <ul class="plain">
+        <li>到 github.com/new 建立一個新的 Public repo，名稱用英文描述主題，例如 <code>tea-shop-expansion-analysis</code>。</li>
+        <li>上傳 <code>README.md</code>、<code>queries.sql</code>，並把 CSV 放進 <code>data</code> 資料夾。</li>
+        <li>在履歷的專案欄寫上 repo 連結，並用一句話說明你的結論和影響。</li>
+        <li>README 裡已註明資料是虛構的教學資料集。想提高說服力，可以用同樣的架構，再做一個使用公開真實資料的專案。</li>
+      </ul>
+    </details>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-asm.js"></script>
+<script src="./common.js"></script>
+<script>
+$('#nav').outerHTML=siteNav('結業專案');
+const BRIEFS={
+  a:{title:'新竹要不要開第二家店？',who:'Grace',role:'執行長',i:'G',tag:'展店決策',
+     msg:'新竹巨城店這幾個月成長很快。董事會在問：要不要在新竹開第二家店？給我你的建議和依據。',
+     guide:['成長是真的嗎？看新竹店每個月的營收、訂單數和月增率，跟其他門市比。','成長來自哪裡？是更多客人，還是同一批客人買更多次、買更貴？','新竹店的客人住在哪裡？有多少是新竹會員，有多少來自其他城市？','新竹店的客單價和毛利率，跟其他門市比起來如何？','這份資料沒有租金、人力成本和商圈人流。這對你的結論有什麼影響？']},
+  b:{title:'金卡會員值得投資嗎？',who:'Vivian',role:'行銷經理',i:'V',tag:'會員經營',
+     msg:'金卡會員不到 50 位，值得我花預算經營嗎？下一季的會員預算，應該放在哪個等級？',
+     guide:['各等級有多少人？各占多少營收？','每位會員平均消費幾次、花多少錢？金卡真的比較高嗎，高多少？','各等級使用優惠券的比例和毛利率有差別嗎？','會員等級是「原因」還是「結果」？金卡消費高，是因為金卡的福利，還是因為消費高才變成金卡？','如果預算有限，哪一群人最有機會被推動多買一次？你會怎麼驗證？']},
+  c:{title:'外送通路該加碼還是收掉？',who:'阿凱',role:'營運經理',i:'凱',tag:'通路策略',
+     msg:'外送平台要抽成 30%。有人說該收掉，有人說該加碼。你怎麼看？',
+     guide:['外送占全公司多少訂單和營收？各門市的比例一樣嗎？','外送的客單價和每單杯數，跟門市、App 自取比起來如何？','扣掉 30% 抽成和成本之後，外送每一單還賺多少？跟其他通路比呢？','外送的會員是不是也會到門市買？如果收掉外送，這些營收會轉到門市，還是直接消失？','7 到 10 月，外送的占比有變化嗎？']}
+};
+const RUBRIC=['我把模糊的問題改寫成可以用資料回答的具體問題','結論放在最前面，而且有明確的建議（做、不做，或先測試）','每個發現都有數字，也附上對應的查詢','我有跟基準比較（其他門市、其他月份或其他群組），不是只看單一數字','我寫出了資料的限制，以及還需要哪些資料','我提出了下一步，或可以驗證建議的方法','不懂技術的人只讀前三行，也知道重點是什麼'];
+const KEY='analyst-quest-project-v1';
+const S=loadState(KEY,{brief:'a',drafts:{},ev:{},rep:{},checks:{}});
+const save=()=>saveState(KEY,S);
+const B=()=>BRIEFS[S.brief];
+const evs=()=>(S.ev[S.brief]=S.ev[S.brief]||[]);
+const rep=()=>(S.rep[S.brief]=S.rep[S.brief]||{summary:'',problem:'',method:'',limits:''});
+const chk=()=>(S.checks[S.brief]=S.checks[S.brief]||[]);
+let db=null, last=null;
+
+function mdTable(cols,rows){
+  const c=v=>v===null?'NULL':String(v).replace(/\|/g,'\\|');
+  return `| ${cols.map(c).join(' | ')} |\n| ${cols.map(()=>'---').join(' | ')} |\n${rows.map(r=>`| ${r.map(c).join(' | ')} |`).join('\n')}`;
+}
+function buildMD(){
+  const b=B(), r=rep(), e=evs(), or=t=>t.trim()||'（尚未填寫）';
+  let md=`# ${b.title}\n\n> 資料：拾光茶飲（虛構的教學資料集，2026 年 7–10 月，5 家門市）\n> 工具：SQL（SQLite）\n> 情境：${b.who}（${b.role}）問：「${b.msg}」\n\n`;
+  md+=`## 結論與建議\n\n${or(r.summary)}\n\n## 問題定義\n\n${or(r.problem)}\n\n## 分析方法\n\n${or(r.method)}\n\n## 主要發現\n\n`;
+  if(!e.length)md+='（尚未加入任何發現）\n\n';
+  e.forEach((x,i)=>{
+    md+=`### 發現 ${i+1}：${x.note}\n\n\`\`\`sql\n${x.sql.trim()}\n\`\`\`\n\n${mdTable(x.cols,x.rows)}\n${x.total>x.rows.length?`\n（共 ${x.total} 列，僅列出前 ${x.rows.length} 列）\n`:''}\n`;
+  });
+  md+=`## 限制與下一步\n\n${or(r.limits)}\n\n## 檔案說明\n\n- \`queries.sql\`：本報告使用的所有查詢\n- \`data/\`：分析用的資料表（CSV）\n`;
+  return md;
+}
+function buildSQL(){return `-- ${B().title}\n\n`+evs().map((x,i)=>`-- 發現 ${i+1}：${x.note}\n${x.sql.trim().replace(/;?\s*$/,';')}\n`).join('\n')}
+
+function renderBriefs(){
+  $('#briefs').innerHTML=Object.entries(BRIEFS).map(([k,b])=>{const n=(S.ev[k]||[]).length;
+    return `<button class="pick ${k===S.brief?'on':''}" data-k="${k}" type="button"><span class="st">${b.tag}</span><b>${b.title}</b><span>${b.who} · ${b.role}</span><span>${n?`已有 ${n} 個發現`:'尚未開始'}</span></button>`}).join('');
+  $('#briefs').querySelectorAll('.pick').forEach(x=>x.onclick=()=>{S.brief=x.dataset.k;save();last=null;renderAll()});
+}
+function renderBrief(){
+  const b=B();
+  $('#b-av').textContent=b.i;
+  $('#b-msg').innerHTML=`<small>${b.who}（${b.role}）</small>${esc(b.msg)}`;
+  $('#b-guide').innerHTML=b.guide.map(g=>`<li>${esc(g)}</li>`).join('');
+}
+function renderEv(){
+  const e=evs();
+  $('#evlist').innerHTML=e.length?e.map((x,i)=>`<div class="ev">
+      <div class="row"><span class="chip">發現 ${i+1}</span><span class="spacer"></span><button class="btn" data-up="${i}" type="button" ${i===0?'disabled':''}>上移</button><button class="btn" data-del="${i}" type="button">移除</button></div>
+      <label class="sr" for="evn-${x.id}">發現 ${i+1} 的說明</label><textarea id="evn-${x.id}" data-note="${i}" style="min-height:60px">${esc(x.note)}</textarea>
+      <pre class="sol">${esc(x.sql.trim())}</pre>${tableHTML({columns:x.cols,values:x.rows},15).replace(/<p class="meta">.*<\/p>$/,'')}
+    </div>`).join('<div style="height:10px"></div>'):'<p class="lead">還沒有任何發現。在步驟 2 查到有用的結果後，寫一句說明並加入報告。一份好的報告通常有 3 到 5 個發現。</p>';
+  const el=$('#evlist');
+  el.querySelectorAll('[data-note]').forEach(t=>t.oninput=()=>{e[+t.dataset.note].note=t.value;save();renderOut()});
+  el.querySelectorAll('[data-del]').forEach(b=>{let armed=false;b.onclick=()=>{if(!armed){armed=true;b.textContent='再按一次確認';b.classList.add('warn');return}e.splice(+b.dataset.del,1);save();renderEv();renderOut();renderBriefs()}});
+  el.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{const i=+b.dataset.up;[e[i-1],e[i]]=[e[i],e[i-1]];save();renderEv();renderOut()});
+}
+function renderReport(){
+  const r=rep();
+  for(const k of ['summary','problem','method','limits']){const t=$('#r-'+k);t.value=r[k];t.oninput=()=>{r[k]=t.value;save();renderOut()}}
+  const c=chk();
+  $('#rubric').innerHTML=RUBRIC.map((q,i)=>`<label><input type="checkbox" id="rb-${i}" data-i="${i}" ${c.includes(i)?'checked':''}><span>${q}</span></label>`).join('');
+  $('#rubric').querySelectorAll('input').forEach(x=>x.onchange=()=>{const i=+x.dataset.i;S.checks[S.brief]=x.checked?[...new Set([...chk(),i])]:chk().filter(v=>v!==i);save();renderOut()});
+}
+function renderOut(){
+  $('#preview').textContent=buildMD();
+  const r=rep(), filled=['summary','problem','method','limits'].filter(k=>r[k].trim()).length;
+  $('#progress').textContent=`目前題目「${B().title}」：${evs().length} 個發現 · 報告 ${filled}/4 段完成 · 自我檢查 ${chk().length}/${RUBRIC.length}。進度會自動存在這台裝置的瀏覽器裡。`;
+}
+function renderAll(){
+  renderBriefs();renderBrief();renderEv();renderReport();renderOut();
+  $('#sql').value=S.drafts[S.brief]||'';$('#result').innerHTML='';$('#addbox').hidden=true;
+}
+
+$('#schema').innerHTML=Object.entries(TABLE_NOTES).map(([t,n])=>`<div><b>${t}</b>${esc(n)}</div>`).join('');
+const ed=$('#sql');
+ed.oninput=()=>{S.drafts[S.brief]=ed.value;save()};
+function run(){
+  if(!db)return; const q=ed.value.trim(); if(!q)return;
+  const r=runSQL(db,q);
+  if(r.err){$('#result').innerHTML=errHTML(r.err);$('#addbox').hidden=true;last=null;return}
+  $('#result').innerHTML=tableHTML(r.res);
+  last=r.res?{sql:q,res:r.res}:null;
+  $('#addbox').hidden=!last;
+}
+editorKeys(ed,run); $('#run').onclick=run;
+$('#add').onclick=()=>{
+  if(!last)return; const note=$('#ev-note').value.trim();
+  if(!note){toast('先寫一句這個結果說明了什麼');$('#ev-note').focus();return}
+  evs().push({id:Date.now().toString(36),note,sql:last.sql,cols:last.res.columns,rows:last.res.values.slice(0,15),total:last.res.values.length});
+  $('#ev-note').value='';save();renderEv();renderOut();renderBriefs();toast('已加入報告');
+};
+$('#dl-md').onclick=()=>downloadText('README.md',buildMD(),'text/markdown;charset=utf-8');
+$('#cp-md').onclick=()=>copyText(buildMD());
+$('#dl-sql').onclick=()=>downloadText('queries.sql',buildSQL());
+$('#dl-csv').onclick=async()=>{
+  if(!db)return;
+  const cell=v=>v===null?'':/[",\n]/.test(String(v))?'"'+String(v).replace(/"/g,'""')+'"':String(v);
+  for(const t of Object.keys(TABLES)){
+    const r=db.exec(`SELECT * FROM ${t}`)[0];
+    downloadText(t+'.csv','﻿'+[r.columns.join(','),...r.values.map(x=>x.map(cell).join(','))].join('\n'),'text/csv;charset=utf-8');
+    await new Promise(z=>setTimeout(z,350));
+  }
+  toast('7 個 CSV 已下載');
+};
+renderAll();
+openDB().then(d=>{db=d;$('#run').disabled=false;$('#run').textContent='執行查詢';$('#dl-csv').disabled=false})
+  .catch(e=>{$('#result').innerHTML=`<div class="fb bad">資料庫建立失敗：${esc(e.message||e)}。請重新整理頁面。</div>`});
+</script>
+</body>
+</html>

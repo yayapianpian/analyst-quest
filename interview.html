@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>分析師養成記 面試模擬</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="./common.css">
+<style>
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tabs button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 16px;font-size:.9rem}
+.tabs button[aria-selected="true"]{background:var(--jade);border-color:var(--jade);color:var(--on-jade);font-weight:500}
+.score{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.score div{background:var(--sunk);border-radius:10px;padding:10px 14px}
+.score b{display:block;font-family:var(--f-mono);font-size:1.4rem;font-variant-numeric:tabular-nums}
+.score span{font-size:.8rem;color:var(--muted)}
+.timer{font-family:var(--f-mono);font-size:1.3rem;font-variant-numeric:tabular-nums;padding:2px 12px;border-radius:8px;background:var(--sunk)}
+.timer.over{background:var(--bad-soft);color:var(--bad)}
+.q-prompt{font-size:1.05rem;max-width:70ch}
+.out{font-size:.85rem;background:var(--sunk);border-radius:8px;padding:8px 12px}
+.out code{font-size:.82rem}
+.note{border-left:3px solid var(--amber);background:var(--amber-soft);padding:8px 14px;border-radius:0 8px 8px 0;font-size:.92rem}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <h1>分析師養成記</h1><span class="sub">面試模擬 · 沒有提示，計時作答</span>
+  <span id="nav"></span>
+</div></header>
+<div class="wrap">
+  <section class="card">
+    <span class="eyebrow">你的面試準備度</span>
+    <div class="score" id="score"></div>
+    <div class="tabs" role="tablist" id="tabs"></div>
+  </section>
+  <div id="view" style="display:flex;flex-direction:column;gap:16px"></div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-asm.js"></script>
+<script src="./common.js"></script>
+<script>
+$('#nav').outerHTML=siteNav('面試模擬');
+const J='FROM orders o JOIN order_items oi ON oi.order_id = o.order_id';
+const SQLQ=[
+ {id:'q1',pattern:'每組取前 N 名',mins:8,title:'每個類別最貴的品項',
+  prompt:'列出每個類別（category）中售價最高的品項。',out:'category, name, price',
+  sol:"SELECT category, name, price\nFROM (\n  SELECT *, RANK() OVER (PARTITION BY category ORDER BY price DESC) AS rk\n  FROM products\n)\nWHERE rk = 1;",
+  why:'面試最常考的題型。重點是知道 GROUP BY 只能拿到最大值、拿不到「是哪一筆」，所以要用視窗函數或子查詢。記得說明 RANK 和 ROW_NUMBER 遇到同分時的差別。'},
+ {id:'q2',pattern:'留存率',mins:10,title:'9 月客人的 10 月留存率',
+  prompt:'在 9 月有消費的會員當中，有多少比例在 10 月也有消費？四捨五入到小數 3 位。散客（customer_id 為 NULL）不算。',out:'一個 0 到 1 的比率',
+  sol:"WITH sep AS (\n  SELECT DISTINCT customer_id FROM orders\n  WHERE customer_id IS NOT NULL AND order_date BETWEEN '2026-09-01' AND '2026-09-30'\n), oct AS (\n  SELECT DISTINCT customer_id FROM orders\n  WHERE customer_id IS NOT NULL AND order_date BETWEEN '2026-10-01' AND '2026-10-31'\n)\nSELECT ROUND(COUNT(oct.customer_id) * 1.0 / COUNT(*), 3) AS retention\nFROM sep LEFT JOIN oct ON oct.customer_id = sep.customer_id;",
+  why:'留存是產品和電商分析的核心指標。重點是分母要先定義清楚（9 月有消費的人），再用 LEFT JOIN 保留沒回來的人。COUNT(欄位) 不會計入 NULL，是這題的關鍵。'},
+ {id:'q3',pattern:'每人的第一筆紀錄',mins:10,title:'會員首購的通路',
+  prompt:'每位會員的「第一筆訂單」是從哪個通路來的？算出各通路的首購會員數。同一天有多筆時，以 order_id 較小的為準。',out:'channel, customers',
+  sol:"WITH f AS (\n  SELECT *, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_date, order_id) AS rn\n  FROM orders\n  WHERE customer_id IS NOT NULL\n)\nSELECT channel, COUNT(*) AS customers\nFROM f\nWHERE rn = 1\nGROUP BY channel;",
+  why:'「每個使用者的第一次行為」是獲客分析的基本功。用 ROW_NUMBER 才能保證每人只留一筆；面試時主動問「同一天多筆怎麼算」會加分。'},
+ {id:'q4',pattern:'累計加總',mins:8,title:'信義店的累計營收',
+  prompt:'台北信義店（store_id = 1）每個月的營收，以及從 7 月起的累計營收。',out:'month（YYYY-MM）, revenue, cumulative',ordered:true,
+  sol:"WITH m AS (\n  SELECT strftime('%Y-%m', o.order_date) AS month,\n         SUM(oi.qty * oi.unit_price) AS revenue\n  "+J+"\n  WHERE o.store_id = 1\n  GROUP BY month\n)\nSELECT month, revenue,\n       SUM(revenue) OVER (ORDER BY month) AS cumulative\nFROM m\nORDER BY month;",
+  why:'SUM() OVER (ORDER BY …) 是累計值的標準寫法。先彙總到月，再做視窗運算，兩層分開寫比較不容易出錯。'},
+ {id:'q5',pattern:'找出重複',mins:6,title:'同一天重複下單',
+  prompt:'同一位會員、同一天、在同一家門市下了 2 筆以上訂單，這樣的（會員、日期、門市）組合有幾組？',out:'一個數字',
+  sol:"SELECT COUNT(*) AS groups\nFROM (\n  SELECT customer_id, order_date, store_id\n  FROM orders\n  WHERE customer_id IS NOT NULL\n  GROUP BY customer_id, order_date, store_id\n  HAVING COUNT(*) >= 2\n);",
+  why:'資料品質檢查的基本題：GROUP BY 加 HAVING COUNT(*) > 1。實務上常用來找重複匯入或重複扣款。'},
+ {id:'q6',pattern:'找出「沒有」的人',mins:6,title:'10 月沒來的會員',
+  prompt:'有多少位會員在 10 月完全沒有消費？',out:'一個數字',
+  sol:"SELECT COUNT(*) AS inactive\nFROM customers c\nWHERE NOT EXISTS (\n  SELECT 1 FROM orders o\n  WHERE o.customer_id = c.customer_id\n    AND o.order_date >= '2026-10-01'\n);",
+  why:'「沒有發生的事」要從完整名單（customers）出發，用 NOT EXISTS 或 LEFT JOIN … IS NULL。只查 orders 永遠找不到沒下單的人。'},
+ {id:'q7',pattern:'同期比較',mins:12,title:'成長最快的品項',
+  prompt:'比較各品項 9 月和 10 月的銷售杯數，算出成長率（10 月 ÷ 9 月 − 1，小數 3 位），列出成長率最高的 3 個品項。',out:'name, sep_qty, oct_qty, growth（依 growth 由高到低，3 列）',ordered:true,
+  sol:"WITH t AS (\n  SELECT p.name,\n         SUM(CASE WHEN strftime('%m', o.order_date) = '09' THEN oi.qty ELSE 0 END) AS sep_qty,\n         SUM(CASE WHEN strftime('%m', o.order_date) = '10' THEN oi.qty ELSE 0 END) AS oct_qty\n  "+J+"\n  JOIN products p ON p.product_id = oi.product_id\n  GROUP BY p.product_id\n)\nSELECT name, sep_qty, oct_qty,\n       ROUND(oct_qty * 1.0 / sep_qty - 1, 3) AS growth\nFROM t\nORDER BY growth DESC\nLIMIT 3;",
+  why:'條件加總（SUM CASE WHEN）把兩個期間攤成兩欄，是做同期比較最乾淨的寫法。別忘了乘 1.0 避免整數除法。'},
+ {id:'q8',pattern:'占比',mins:8,title:'各門市的營收占比',
+  prompt:'各門市的營收，以及占全公司營收的比例（小數 3 位），由高到低。',out:'store_name, revenue, share（依 revenue 由高到低）',ordered:true,
+  sol:"SELECT s.name AS store_name,\n       SUM(oi.qty * oi.unit_price) AS revenue,\n       ROUND(SUM(oi.qty * oi.unit_price) * 1.0\n             / SUM(SUM(oi.qty * oi.unit_price)) OVER (), 3) AS share\n"+J+"\nJOIN stores s ON s.store_id = o.store_id\nGROUP BY s.store_id\nORDER BY revenue DESC;",
+  why:'SUM(…) OVER () 可以在每一列拿到全體總和。用子查詢算總數再相除也可以，面試時能說出兩種寫法更好。'}
+];
+const CASES=[
+ {id:'k1',kind:'case',title:'指標下降怎麼查',prompt:'「App 的每日訂單數，這週比上週掉了 10%。你會怎麼查？」',
+  points:['先確認數字本身可信：定義有沒有改、追蹤有沒有壞、資料有沒有延遲','確認下降的樣子：是某一天突然掉，還是慢慢下滑；有沒有假日或季節因素','依維度拆開看：平台、App 版本、通路、門市、新客或舊客','沿著漏斗拆：是進來的人變少，還是某一步的轉換率變差','列出內部事件：改版、活動結束、缺貨、價格調整','考慮外部因素：天氣、競爭對手活動','提出最可能的假設，並說明要用什麼資料驗證','估計影響大小，並建議下一步行動'],
+  tip:'面試官要聽的是有順序的拆解方法，不是直接猜一個原因。先確認資料，再由大到小縮小範圍。'},
+ {id:'k2',kind:'case',title:'為新功能設計指標',prompt:'「我們想在 App 上線『再來一杯』一鍵回購功能。你會用哪些指標判斷它成不成功？」',
+  points:['先釐清這個功能的目標（提高回購頻率，還是縮短下單時間）','選一個主要指標，例如 30 天回購率或每位會員的訂單數','補上輔助指標：功能使用率、下單所需時間、客單價','設定護欄指標，確認沒有傷害其他東西：退款、客訴、毛利','說明比較方法：A/B 測試優先；如果只能前後比較，要講出它的缺點','考慮觀察期要多長，以及剛上線的新鮮感效應','分群檢視：新客與舊客、不同平台的效果是否一致'],
+  tip:'好的答案有「一個主要指標」加上「不能變差的護欄指標」。只列一堆指標而沒有主次，是常見的扣分點。'},
+ {id:'k3',kind:'case',title:'解讀 A/B 測試結果',prompt:'「新結帳頁的轉換率從 12.0% 升到 12.6%，p 值是 0.03。產品經理想明天就全面上線，你會說什麼？」',
+  points:['統計顯著不等於商業上值得做：把 0.6 個百分點換算成每月多幾筆訂單、多少營收','確認測試跑了完整的一週以上，涵蓋平日和週末','確認兩組的人數比例符合原本的分流設定','確認沒有中途偷看結果就停止，或同時比較很多指標','檢查護欄指標：客單價、退款率、付款失敗率有沒有變差','看不同族群（平台、新舊客）的效果方向是否一致','給出明確建議：上線、延長測試，或分階段放量'],
+  tip:'這題考的是你會不會盲目相信 p 值。最後一定要給建議，不能只列出疑慮。'},
+ {id:'k4',kind:'case',title:'估算題',prompt:'「估計一下，拾光茶飲信義店平日一天大概賣出幾杯？說出你的估算過程。」',
+  points:['先講清楚打算怎麼拆解，再開始算','把一天分成尖峰和離峰時段，分別估計','估計每小時的訂單數，或從製作產能反推','考慮每筆訂單平均幾杯','用第二種方法交叉驗證（例如從營收或店員人數反推）','給出一個範圍，而不是單一數字','指出哪個假設最不確定、會怎麼去驗證'],
+  tip:'估算題不看答案準不準，看的是拆解邏輯。答完可以到 SQL 篇用資料驗證你的估計，練習「先猜再查」。'},
+ {id:'b1',kind:'star',title:'為什麼想轉職',prompt:'「你之前不是做這一行的，為什麼想轉做數據分析？」',
+  points:['講出過去工作中接觸數據或解決問題的具體經驗','說明做了哪些準備：學了什麼、做了哪些專案','提到一個實際的專案成果，而不是只說「我很有興趣」','說明為什麼是這家公司或這個產業','沒有貶低前一份工作','整段回答控制在 1 分半鐘內'],
+  tip:'轉職者的優勢是原本領域的知識。把「我懂某個產業，現在又會分析」講出來，比強調熱情更有說服力。'},
+ {id:'b2',kind:'star',title:'用數據影響決策',prompt:'「請分享一次你用數據影響決策的經驗。」',
+  points:['情境：一兩句話交代背景','任務：你要解決的問題是什麼','行動：說「我」做了什麼，而不是「我們」','行動裡包含你怎麼驗證自己的結論','結果：有數字，或有具體的決策改變','最後補一句你學到什麼'],
+  tip:'可以直接用遊戲裡「消失的營收」或結業專案的內容來練習。真實面試時，換成你原本工作中的例子會更有力。'},
+ {id:'b3',kind:'star',title:'分析出錯的經驗',prompt:'「說一次你的分析出錯，或結論被質疑的經驗。你怎麼處理？」',
+  points:['誠實描述錯誤，沒有淡化','說明是怎麼發現的','說明怎麼修正，以及怎麼主動告知受影響的人','之後建立了什麼檢查機制避免再犯','沒有把責任推給別人或推給資料'],
+  tip:'面試官想知道的是你犯錯之後的處理方式。講不出任何錯誤，反而會讓人擔心。'}
+];
+const KEY='analyst-quest-interview-v1';
+const S=loadState(KEY,{tab:'sql',sql:{},drafts:{},cases:{},active:null});
+const save=()=>saveState(KEY,S);
+let db=null, EXP={}, tick=null;
+const DAY=864e5;
+const due=q=>{const a=S.sql[q.id];return a&&(a.status!=='pass'||Date.now()-a.at>3*DAY)};
+const fmt=s=>{s=Math.max(0,Math.round(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
+
+function renderScore(){
+  const pass=SQLQ.filter(q=>S.sql[q.id]&&S.sql[q.id].status==='pass').length;
+  const done=CASES.filter(c=>S.cases[c.id]&&S.cases[c.id].revealed);
+  const cov=done.reduce((a,c)=>a+(S.cases[c.id].checked||[]).length,0), tot=done.reduce((a,c)=>a+c.points.length,0);
+  $('#score').innerHTML=`<div><b>${pass}/${SQLQ.length}</b><span>SQL 題在時限內答對</span></div>
+    <div><b>${done.length}/${CASES.length}</b><span>案例與行為題已練習</span></div>
+    <div><b>${tot?Math.round(cov/tot*100)+'%':'–'}</b><span>參考重點的涵蓋率</span></div>
+    <div><b>${SQLQ.filter(due).length}</b><span>題待複習</span></div>`;
+  const tabs=[['sql','限時 SQL'],['case','商業案例'],['star','行為面試'],['review','複習清單']];
+  $('#tabs').innerHTML=tabs.map(([k,t])=>`<button role="tab" aria-selected="${S.tab===k}" data-t="${k}" type="button">${t}</button>`).join('');
+  $('#tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.t;S.active=null;save();render()});
+}
+function statusChip(q){
+  const a=S.sql[q.id]; if(!a)return '<span class="chip">尚未作答</span>';
+  if(a.status==='pass')return `<span class="chip ok">通過 ${fmt(a.secs)}</span>`;
+  if(a.status==='late')return `<span class="chip amber">超時答對 ${fmt(a.secs)}</span>`;
+  return '<span class="chip bad">看了解答</span>';
+}
+function listHTML(qs,empty){
+  return qs.length?`<div class="grid">${qs.map(q=>`<button class="pick" data-q="${q.id}" type="button"><span class="st">${q.pattern} · 限時 ${q.mins} 分鐘</span><b>${q.title}</b>${statusChip(q)}</button>`).join('')}</div>`:`<p class="lead">${empty}</p>`;
+}
+function render(){
+  clearInterval(tick); renderScore();
+  const v=$('#view');
+  if(S.active){renderQuestion(SQLQ.find(q=>q.id===S.active.id));return}
+  if(S.tab==='sql'){
+    v.innerHTML=`<section class="card"><h2>限時 SQL 題</h2><p class="lead">8 題都是面試常見的題型。點進去就開始計時，沒有提示。答對會顯示參考解法和面試官想看的重點；真的卡住可以放棄並看解答，這題會進入複習清單。</p>${listHTML(SQLQ)}</section>`;
+  } else if(S.tab==='review'){
+    v.innerHTML=`<section class="card"><h2>複習清單</h2><p class="lead">超時、看過解答的題目會出現在這裡；答對超過 3 天的題目也會回來，確認你還記得。</p>${listHTML(SQLQ.filter(due),'目前沒有需要複習的題目。先到「限時 SQL」作答。')}</section>`;
+  } else {
+    const kind=S.tab, list=CASES.filter(c=>c.kind===kind);
+    v.innerHTML=`<section class="card"><h2>${kind==='case'?'商業案例題':'行為面試題'}</h2><p class="lead">${kind==='case'?'這類題目沒有標準答案，面試官看的是你拆解問題的順序。':'用 STAR 架構回答：情境、任務、行動、結果。'}先把你的回答打出來（或大聲說一遍再打重點），再對照參考重點，勾選你有講到的項目。</p></section>`+list.map(caseHTML).join('');
+    list.forEach(wireCase);
+  }
+  v.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{S.active={id:b.dataset.q,startAt:Date.now()};save();render();window.scrollTo({top:0,behavior:'smooth'})});
+}
+function renderQuestion(q){
+  const v=$('#view'), a=S.sql[q.id], finished=S.active.done;
+  v.innerHTML=`<section class="card">
+    <div class="row"><span class="chip">${q.pattern}</span><span class="spacer"></span><span class="timer" id="timer">${fmt(q.mins*60)}</span></div>
+    <h2>${q.title}</h2>
+    <p class="q-prompt">${q.prompt}</p>
+    <div class="out">輸出：<code>${q.out}</code></div>
+    <details class="box"><summary>資料表與欄位</summary><div class="schema-mini">${Object.entries(TABLE_NOTES).map(([t,n])=>`<div><b>${t}</b>${esc(n)}</div>`).join('')}</div></details>
+    <label class="sr" for="sql">SQL 編輯器</label>
+    <textarea class="code" id="sql" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="-- 沒有提示，靠自己。Ctrl + Enter 執行">${esc(S.drafts[q.id]||'')}</textarea>
+    <div class="row"><button class="btn primary" id="run" type="button" ${db?'':'disabled'}>${db?'執行並檢查':'資料庫建立中…'}</button><span class="kbd">Ctrl / ⌘ + Enter</span><span class="spacer"></span>
+      ${finished?'':'<button class="btn" id="giveup" type="button">放棄並看解答</button>'}<button class="btn" id="back" type="button">回到題目列表</button></div>
+    <div id="fb">${finished?doneHTML(q,a):''}</div>
+    <div id="result"></div>
+  </section>`;
+  const ed=$('#sql'); ed.oninput=()=>{S.drafts[q.id]=ed.value;save()};
+  const finish=status=>{
+    const secs=(Date.now()-S.active.startAt)/1000;
+    S.sql[q.id]={status:status==='ok'?(secs<=q.mins*60?'pass':'late'):'fail',secs,at:Date.now()};
+    S.active.done=true; save(); clearInterval(tick); renderScore();
+    $('#fb').innerHTML=doneHTML(q,S.sql[q.id]); const g=$('#giveup'); if(g)g.remove();
+    const t=$('#timer'); t.textContent='已完成'; t.classList.remove('over');
+  };
+  const run=()=>{
+    if(!db)return; const sql=ed.value.trim(); if(!sql)return;
+    const r=runSQL(db,sql);
+    if(r.err){$('#result').innerHTML=errHTML(r.err);return}
+    $('#result').innerHTML=tableHTML(r.res);
+    if(S.active.done)return;
+    const msg=checkResult(r.res,EXP[q.id],!!q.ordered);
+    if(msg===null)finish('ok'); else $('#fb').innerHTML=`<div class="fb info">還不對：${msg}</div>`;
+  };
+  editorKeys(ed,run); $('#run').onclick=run;
+  $('#back').onclick=()=>{S.active=null;save();render()};
+  const g=$('#giveup'); if(g){let armed=false;g.onclick=()=>{if(!armed){armed=true;g.textContent='再按一次確認放棄';g.classList.add('warn');return}finish('fail')}}
+  if(!finished){
+    const upd=()=>{const left=q.mins*60-(Date.now()-S.active.startAt)/1000, t=$('#timer');if(!t)return;t.textContent=left>=0?fmt(left):'超時 '+fmt(-left);t.classList.toggle('over',left<0)};
+    upd(); tick=setInterval(upd,1000);
+  } else $('#timer').textContent='已完成';
+}
+function doneHTML(q,a){
+  const head=a.status==='pass'?`<div class="fb ok"><strong>在時限內答對！</strong>用時 ${fmt(a.secs)}（限時 ${q.mins} 分鐘）。</div>`
+    :a.status==='late'?`<div class="fb info"><strong>答對了，但超過時限。</strong>用時 ${fmt(a.secs)}（限時 ${q.mins} 分鐘）。這題已加入複習清單，過幾天再練一次速度。</div>`
+    :`<div class="fb info"><strong>這題已加入複習清單。</strong>先讀懂下面的解法，過幾天不看答案再寫一次。</div>`;
+  return `${head}<div style="height:10px"></div><div class="note"><b>面試官想看什麼：</b>${q.why}</div><div style="height:10px"></div><pre class="sol">${esc(q.sol)}</pre>`;
+}
+function caseHTML(c){
+  const st=S.cases[c.id]||{}, ck=st.checked||[];
+  return `<section class="card" id="c-${c.id}">
+    <div class="row"><h3>${c.title}</h3><span class="spacer"></span>${st.revealed?`<span class="chip ${ck.length>=c.points.length*0.7?'ok':'amber'}">講到 ${ck.length}/${c.points.length} 個重點</span>`:'<span class="chip">尚未練習</span>'}</div>
+    <div class="msg"><div class="avatar" aria-hidden="true">面</div><div class="bubble"><small>面試官</small>${c.prompt}</div></div>
+    <label class="fld" for="t-${c.id}">你的回答<textarea id="t-${c.id}" style="min-height:140px" placeholder="先自己寫，再看參考重點。">${esc(st.text||'')}</textarea></label>
+    ${st.revealed?`<div><span class="eyebrow amber">參考重點：勾選你有講到的</span><div class="checks" style="margin-top:8px">${c.points.map((p,i)=>`<label><input type="checkbox" id="k-${c.id}-${i}" data-i="${i}" ${ck.includes(i)?'checked':''}><span>${p}</span></label>`).join('')}</div></div><div class="note">${c.tip}</div>`
+      :`<div class="row"><button class="btn primary" data-reveal type="button">我寫完了，看參考重點</button></div>`}
+  </section>`;
+}
+function wireCase(c){
+  const el=$('#c-'+c.id), st=()=>(S.cases[c.id]=S.cases[c.id]||{text:'',checked:[]});
+  el.querySelector('textarea').oninput=e=>{st().text=e.target.value;save()};
+  const rv=el.querySelector('[data-reveal]');
+  if(rv)rv.onclick=()=>{
+    if((st().text||'').trim().length<20){toast('先寫下你的回答，至少幾句話');el.querySelector('textarea').focus();return}
+    st().revealed=true;save();el.outerHTML=caseHTML(c);wireCase(c);renderScore();
+  };
+  el.querySelectorAll('.checks input').forEach(x=>x.onchange=()=>{
+    const i=+x.dataset.i, s=st(); s.checked=x.checked?[...new Set([...(s.checked||[]),i])]:(s.checked||[]).filter(v=>v!==i);
+    save(); renderScore();
+    const chip=el.querySelector('.row .chip'); chip.textContent=`講到 ${s.checked.length}/${c.points.length} 個重點`; chip.className='chip '+(s.checked.length>=c.points.length*0.7?'ok':'amber');
+  });
+}
+if(S.active&&S.active.done)S.active=null;
+render();
+openDB().then(d=>{
+  db=d; SQLQ.forEach(q=>{const r=db.exec(q.sol);EXP[q.id]=r[r.length-1]});
+  const b=$('#run'); if(b){b.disabled=false;b.textContent='執行並檢查'}
+}).catch(e=>{$('#view').insertAdjacentHTML('afterbegin',`<div class="fb bad">資料庫建立失敗：${esc(e.message||e)}。請重新整理頁面。</div>`)});
+</script>
+</body>
+</html>
